@@ -2,6 +2,23 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
+import os
+
+# Prevent this file from being rendered as a Streamlit page
+# This is a utility module, not a page - it should only be imported
+# Check if this is being run as a page (has page config or is being accessed directly)
+try:
+    # If this file is accessed as a page, show a message and stop
+    if hasattr(st, '_is_running_with_streamlit') and st._is_running_with_streamlit:
+        # Check if we're in the main execution context (not imported)
+        import inspect
+        frame = inspect.currentframe()
+        # If called directly (not imported), show message
+        if frame and frame.f_back and 'streamlit' in str(frame.f_back.f_code.co_filename):
+            st.info("ℹ️ **utils.py** é um módulo de funções utilitárias, não uma página.\n\nUse as páginas do menu lateral: Home, Bribes Analysis, Pool Classification, etc.")
+            st.stop()
+except:
+    pass
 
 def inject_css():
     st.markdown("""
@@ -127,7 +144,87 @@ def inject_css():
 @st.cache_data
 def load_data():
     try:
-        df = pd.read_csv('balancer_v2_financial_master_final.csv')
+        # Get current working directory (where streamlit is run from)
+        cwd = os.getcwd()
+        
+        # Try to get script directory
+        try:
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            project_root = os.path.dirname(script_dir)
+        except:
+            script_dir = cwd
+            project_root = os.path.dirname(cwd) if os.path.basename(cwd) == 'script' else cwd
+        
+        # Build possible data directories
+        possible_data_dirs = [
+            os.path.join(project_root, 'data'),
+            os.path.join(cwd, 'data'),
+            os.path.join(cwd, '..', 'data'),
+            os.path.join(script_dir, 'data'),
+            'data'
+        ]
+        
+        # Try different possible file names and paths
+        # Priority: ../data/ (most likely when running from script/)
+        file_paths = [
+            os.path.abspath(os.path.join(cwd, '..', 'data', 'balancer_v2_financial_master_final.csv')),  # ../data/ - MOST LIKELY
+        ]
+        # Then try other data directories
+        for data_dir in possible_data_dirs:
+            abs_data_dir = os.path.abspath(data_dir)
+            file_paths.extend([
+                os.path.join(abs_data_dir, 'balancer_v2_financial_master_final.csv'),
+                os.path.join(abs_data_dir, 'balancer_v2_best_pools.csv'),
+            ])
+        # Also try relative to current directory
+        file_paths.extend([
+            os.path.join(cwd, 'balancer_v2_financial_master_final.csv'),
+            'data/balancer_v2_financial_master_final.csv',
+            'balancer_v2_financial_master_final.csv'
+        ])
+        
+        df = None
+        found_path = None
+        for path in file_paths:
+            try:
+                # Normalize path
+                if not os.path.isabs(path):
+                    abs_path = os.path.abspath(path)
+                else:
+                    abs_path = path
+                
+                # Check if file exists and has content
+                if os.path.exists(abs_path) and os.path.getsize(abs_path) > 100:  # At least 100 bytes
+                    df = pd.read_csv(abs_path)
+                    if df is not None and not df.empty:
+                        found_path = abs_path
+                        break
+            except (FileNotFoundError, pd.errors.EmptyDataError, pd.errors.ParserError, Exception) as e:
+                continue
+        
+        if df is None or df.empty:
+            error_msg = st.error("❌ CSV file not found or is empty.")
+            with st.expander("🔍 Debug Info - Click to see details"):
+                st.write(f"**Current working directory:** `{cwd}`")
+                st.write(f"**Script directory:** `{script_dir}`")
+                st.write(f"**Project root:** `{project_root}`")
+                st.write("**Tried paths:**")
+                for i, path in enumerate(file_paths[:15], 1):
+                    abs_path = os.path.abspath(path)
+                    exists = "✅" if os.path.exists(abs_path) else "❌"
+                    st.write(f"{i}. {exists} `{abs_path}`")
+                # List files in data directory if it exists
+                for data_dir in possible_data_dirs:
+                    abs_data_dir = os.path.abspath(data_dir)
+                    if os.path.exists(abs_data_dir):
+                        st.write(f"\n**Files in `{abs_data_dir}`:**")
+                        try:
+                            files = [f for f in os.listdir(abs_data_dir) if f.endswith('.csv')]
+                            for f in files[:10]:
+                                st.write(f"  - {f}")
+                        except:
+                            pass
+            return pd.DataFrame()
         
         if 'block_date' in df.columns:
             df['block_date'] = pd.to_datetime(df['block_date'], errors='coerce')
@@ -219,6 +316,64 @@ def classify_pools(df):
     df['pool_category'] = df['pool_category'].fillna('Undefined')
     
     return df
+
+@st.cache_data
+def load_bribes_data():
+    """Load bribes and gauges enriched data"""
+    try:
+        # Get current working directory (where streamlit is run from)
+        cwd = os.getcwd()
+        
+        # Try different possible file names and paths (in order of likelihood)
+        file_paths = [
+            os.path.abspath(os.path.join(cwd, '..', 'data', 'Balancer_Bribes_Gauges_enriched.csv')),  # ../data/file.csv
+            os.path.abspath(os.path.join(cwd, '..', 'data', 'balancer_bribes_gauges_enriched.csv')),
+            os.path.abspath(os.path.join(cwd, '..', 'data', 'Balancer_Bribes_Gauges.csv')),
+            os.path.abspath(os.path.join(cwd, 'data', 'Balancer_Bribes_Gauges_enriched.csv')),  # data/file.csv
+            os.path.abspath(os.path.join(cwd, 'data', 'balancer_bribes_gauges_enriched.csv')),
+            'data/Balancer_Bribes_Gauges_enriched.csv',  # relative
+            'data/balancer_bribes_gauges_enriched.csv',
+            'Balancer_Bribes_Gauges_enriched.csv'  # current dir
+        ]
+        
+        df_bribes = None
+        for path in file_paths:
+            try:
+                abs_path = os.path.abspath(path) if not os.path.isabs(path) else path
+                if os.path.exists(abs_path) and os.path.getsize(abs_path) > 0:
+                    df_bribes = pd.read_csv(abs_path)
+                    if not df_bribes.empty:
+                        break
+            except (FileNotFoundError, pd.errors.EmptyDataError, pd.errors.ParserError, Exception):
+                continue
+        
+        if df_bribes is None or df_bribes.empty:
+            return pd.DataFrame()
+        
+        # Convert date columns if they exist
+        date_cols = ['date', 'block_date', 'timestamp', 'week', 'period']
+        for col in date_cols:
+            if col in df_bribes.columns:
+                df_bribes[col] = pd.to_datetime(df_bribes[col], errors='coerce')
+        
+        # Convert numeric columns
+        numeric_cols = [
+            'bribe_amount_usd', 'bribe_amount', 'total_bribes_usd',
+            'votes_received', 'bal_received', 'bal_emitted',
+            'bribe_efficiency', 'bribe_per_vote', 'votes_per_bribe',
+            'gauge_weight', 'gauge_share', 'bribe_count'
+        ]
+        
+        for col in numeric_cols:
+            if col in df_bribes.columns:
+                df_bribes[col] = pd.to_numeric(df_bribes[col], errors='coerce').fillna(0)
+        
+        return df_bribes
+    except FileNotFoundError:
+        return pd.DataFrame()
+    except Exception as e:
+        st.error(f"Error loading bribes data: {str(e)}")
+        return pd.DataFrame()
 
 def get_top_pools(df, n=20):
     pool_agg = df.groupby('pool_symbol')['dao_profit_usd'].sum().sort_values(ascending=False).head(n)
