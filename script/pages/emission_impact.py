@@ -106,76 +106,52 @@ df_sim = utils.run_simulation_sidebar(df)
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 🔍 Pool Selection")
 
-if 'selected_pools_emission' not in st.session_state:
-    st.session_state.selected_pools_emission = []
+# Initialize session state - default to 'all' (show everything)
 if 'pool_filter_mode_emission' not in st.session_state:
-    st.session_state.pool_filter_mode_emission = 'top20'
+    st.session_state.pool_filter_mode_emission = 'all'  # Default: show all pools
 
 col_btn1, col_btn2 = st.sidebar.columns(2)
 
 with col_btn1:
     if st.button("Top 20", key="btn_top20_emission"):
-        old_mode = st.session_state.pool_filter_mode_emission
         st.session_state.pool_filter_mode_emission = 'top20'
-        # Clear selections when mode changes
-        if old_mode != 'top20':
-            st.session_state.selected_pools_emission = []
         st.rerun()
 
 with col_btn2:
     if st.button("Worst 20", key="btn_worst20_emission"):
-        old_mode = st.session_state.pool_filter_mode_emission
         st.session_state.pool_filter_mode_emission = 'worst20'
-        # Clear selections when mode changes
-        if old_mode != 'worst20':
-            st.session_state.selected_pools_emission = []
         st.rerun()
 
-if st.session_state.pool_filter_mode_emission == 'worst20':
-    filter_pools = sorted([str(p) for p in utils.get_worst_pools(df, n=20)])
-    filter_label = "Select from Worst 20 Pools"
+# Show "Select All" button only when a filter is active (top20 or worst20)
+if st.session_state.pool_filter_mode_emission in ['top20', 'worst20']:
+    if st.sidebar.button("Select All", key="btn_select_all_emission"):
+        st.session_state.pool_filter_mode_emission = 'all'
+        st.rerun()
+
+# Filter data based on mode
+if st.session_state.pool_filter_mode_emission == 'top20':
+    # Get top 20 pools
+    top_pools = utils.get_top_pools(df, n=20)
+    top_pools_list = [str(p) for p in top_pools]
+    df_display = df_sim[df_sim['pool_symbol'].isin(top_pools_list)].copy()
+    st.info(f"📊 Showing analysis for Top 20 Pools ({len(top_pools_list)} pools)")
+elif st.session_state.pool_filter_mode_emission == 'worst20':
+    # Get worst 20 pools
+    worst_pools = utils.get_worst_pools(df, n=20)
+    worst_pools_list = [str(p) for p in worst_pools]
+    df_display = df_sim[df_sim['pool_symbol'].isin(worst_pools_list)].copy()
+    st.info(f"📊 Showing analysis for Worst 20 Pools ({len(worst_pools_list)} pools)")
 else:
-    filter_pools = sorted([str(p) for p in utils.get_top_pools(df, n=20)])
-    filter_label = "Select from Top 20 Pools"
-
-# Clear invalid selections when filter mode changes
-valid_sel = [p for p in st.session_state.selected_pools_emission if p in filter_pools]
-if len(valid_sel) != len(st.session_state.selected_pools_emission):
-    st.session_state.selected_pools_emission = valid_sel
-
-# Initialize default selection from session state if valid
-default_selection = []
-if st.session_state.selected_pools_emission:
-    # Only use session state if all selections are valid for current filter
-    if all(p in filter_pools for p in st.session_state.selected_pools_emission):
-        default_selection = st.session_state.selected_pools_emission
-
-if st.sidebar.button("Select All", key="btn_select_all_emission"):
-    st.session_state.selected_pools_emission = filter_pools.copy()
-    default_selection = filter_pools.copy()
-    st.rerun()
-
-# Use dynamic key based on filter mode to force update when mode changes
-multiselect_key = f"multiselect_pools_emission_{st.session_state.pool_filter_mode_emission}"
-
-selected_pools = st.sidebar.multiselect(
-    filter_label,
-    options=filter_pools,
-    default=default_selection,
-    help="Select specific pools to view individual analysis",
-    key=multiselect_key
-)
-
-# Always sync session state with current selection
-st.session_state.selected_pools_emission = list(selected_pools) if selected_pools else []
-
-filter_by_pools = len(selected_pools) > 0
-
-if filter_by_pools:
-    df_display = df_sim[df_sim['pool_symbol'].isin(selected_pools)].copy()
-    st.info(f"📊 Showing analysis for {len(selected_pools)} selected pool(s)")
-else:
+    # 'all' mode - show everything
     df_display = df_sim.copy()
+    total_pools = len(df_sim['pool_symbol'].unique()) if 'pool_symbol' in df_sim.columns else 0
+    st.info(f"📊 Showing analysis for all pools ({total_pools} pools)")
+
+st.sidebar.markdown("---")
+st.sidebar.markdown("### 📉 Emission Reduction Scenarios")
+
+reduction_50 = st.sidebar.checkbox("50% Reduction (Keep 50% of emissions)", value=True)
+reduction_70 = st.sidebar.checkbox("70% Reduction (Keep 30% of emissions)", value=True)
 
 # Page Header with logout button
 col_title, col_logout = st.columns([1, 0.1])
@@ -186,12 +162,6 @@ with col_logout:
     utils.show_logout_button()
 
 st.markdown("---")
-
-st.sidebar.markdown("---")
-st.sidebar.markdown("### 📉 Emission Reduction Scenarios")
-
-reduction_50 = st.sidebar.checkbox("50% Reduction (Keep 50% of emissions)", value=True)
-reduction_70 = st.sidebar.checkbox("70% Reduction (Keep 30% of emissions)", value=True)
 
 # ============================================================================
 # EMISSIONS ANALYSIS: LEGITIMATE VS MERCENARY
@@ -585,6 +555,13 @@ if len(df_comparison) > 0:
     
     fig1 = go.Figure()
     
+    # Define a more pleasant color palette
+    color_map = {
+        'Baseline': '#4A90E2',        # Soft blue
+        '50% Reduction': '#F5A623',   # Warm orange
+        '70% Reduction': '#50C878'    # Fresh green
+    }
+    
     scenarios_list = ['Baseline'] + [s['name'] for s in scenario_data]
     
     for scenario in scenarios_list:
@@ -593,6 +570,10 @@ if len(df_comparison) > 0:
                 name=scenario,
                 x=list(pivot_profit.index),
                 y=pivot_profit[scenario],
+                marker=dict(
+                    color=color_map.get(scenario, '#6C7A89'),
+                    line=dict(width=0)
+                ),
                 marker_line_width=0
             ))
     
@@ -629,11 +610,15 @@ if len(df_comparison) > 0:
     
     st.plotly_chart(fig1, use_container_width=True, key="emission_comparison")
 
-if filter_by_pools:
+# Show detailed pool analysis when filtering by Top 20 or Worst 20
+if st.session_state.pool_filter_mode_emission in ['top20', 'worst20']:
     st.markdown("---")
-    st.markdown("### 📋 Selected Pools Impact")
+    st.markdown("### 📋 Pools Impact Analysis")
     
-    for idx, pool in enumerate(selected_pools):
+    # Get list of pools from filtered data
+    filtered_pools = sorted(df_display['pool_symbol'].unique().tolist())
+    
+    for idx, pool in enumerate(filtered_pools):
         pool_data = df_display[df_display['pool_symbol'] == pool]
         if len(pool_data) > 0:
             with st.expander(f"{pool}"):
@@ -668,5 +653,5 @@ if filter_by_pools:
                     with col_s3:
                         st.metric("Reduced Incentives", f"${reduced_inc:,.0f}", f"-${inc_reduction:,.0f}")
                     
-                    if idx < len(selected_pools) - 1 or scenario_name != scenarios[-1][0]:
+                    if idx < len(filtered_pools) - 1 or scenario_name != scenarios[-1][0]:
                         st.markdown("---")
