@@ -110,7 +110,7 @@ st.sidebar.markdown("### 🔍 Pool Selection")
 if 'selected_pools_weekly' not in st.session_state:
     st.session_state.selected_pools_weekly = []
 if 'pool_filter_mode_weekly' not in st.session_state:
-    st.session_state.pool_filter_mode_weekly = 'top20'
+    st.session_state.pool_filter_mode_weekly = 'all'  # Default: show all pools
 
 col_btn1, col_btn2 = st.sidebar.columns(2)
 
@@ -132,51 +132,30 @@ with col_btn2:
             st.session_state.selected_pools_weekly = []
         st.rerun()
 
-if st.session_state.pool_filter_mode_weekly == 'worst20':
-    filter_pools = sorted([str(p) for p in utils.get_worst_pools(df, n=20)])
-    filter_label = "Select from Worst 20 Pools"
+# Filter data based on mode
+if st.session_state.pool_filter_mode_weekly == 'top20':
+    # Get top 20 pools
+    top_pools = utils.get_top_pools(df, n=20)
+    top_pools_list = [str(p) for p in top_pools]
+    df_display = df_sim[df_sim['pool_symbol'].isin(top_pools_list)].copy()
+    st.info(f"📊 Showing analysis for Top 20 Pools ({len(top_pools_list)} pools)")
+elif st.session_state.pool_filter_mode_weekly == 'worst20':
+    # Get worst 20 pools
+    worst_pools = utils.get_worst_pools(df, n=20)
+    worst_pools_list = [str(p) for p in worst_pools]
+    df_display = df_sim[df_sim['pool_symbol'].isin(worst_pools_list)].copy()
+    st.info(f"📊 Showing analysis for Worst 20 Pools ({len(worst_pools_list)} pools)")
 else:
-    filter_pools = sorted([str(p) for p in utils.get_top_pools(df, n=20)])
-    filter_label = "Select from Top 20 Pools"
-
-# Clear invalid selections when filter mode changes
-valid_sel = [p for p in st.session_state.selected_pools_weekly if p in filter_pools]
-if len(valid_sel) != len(st.session_state.selected_pools_weekly):
-    st.session_state.selected_pools_weekly = valid_sel
-
-# Initialize default selection from session state if valid
-default_selection = []
-if st.session_state.selected_pools_weekly:
-    # Only use session state if all selections are valid for current filter
-    if all(p in filter_pools for p in st.session_state.selected_pools_weekly):
-        default_selection = st.session_state.selected_pools_weekly
-
-if st.sidebar.button("Select All", key="btn_select_all_weekly"):
-    st.session_state.selected_pools_weekly = filter_pools.copy()
-    default_selection = filter_pools.copy()
-    st.rerun()
-
-# Use dynamic key based on filter mode to force update when mode changes
-multiselect_key = f"multiselect_pools_weekly_{st.session_state.pool_filter_mode_weekly}"
-
-selected_pools = st.sidebar.multiselect(
-    filter_label,
-    options=filter_pools,
-    default=default_selection,
-    help="Select specific pools to view individual analysis",
-    key=multiselect_key
-)
-
-# Always sync session state with current selection
-st.session_state.selected_pools_weekly = list(selected_pools) if selected_pools else []
-
-filter_by_pools = len(selected_pools) > 0
-
-if filter_by_pools:
-    df_display = df_sim[df_sim['pool_symbol'].isin(selected_pools)].copy()
-    st.info(f"📊 Showing analysis for {len(selected_pools)} selected pool(s)")
-else:
+    # 'all' mode - show everything
     df_display = df_sim.copy()
+    total_pools = len(df_sim['pool_symbol'].unique()) if 'pool_symbol' in df_sim.columns else 0
+    st.info(f"📊 Showing analysis for all pools ({total_pools} pools)")
+
+# Show "Select All" button only when a filter is active (top20 or worst20)
+if st.session_state.pool_filter_mode_weekly in ['top20', 'worst20']:
+    if st.sidebar.button("Select All", key="btn_select_all_weekly"):
+        st.session_state.pool_filter_mode_weekly = 'all'
+        st.rerun()
 
 # Page Header with logout button
 col_title, col_logout = st.columns([1, 0.1])
@@ -339,14 +318,18 @@ with col_chart2:
     
     st.plotly_chart(fig2, use_container_width=True, key="weekly_incentives")
 
-if filter_by_pools:
-    st.markdown("---")
-    st.markdown("### 📋 Selected Pools Weekly Analysis")
+# Show individual pool analysis only when Top 20 or Worst 20 filter is active
+if st.session_state.pool_filter_mode_weekly in ['top20', 'worst20']:
+    filtered_pools = sorted(df_display['pool_symbol'].unique())
     
-    for idx, pool in enumerate(selected_pools):
-        pool_weekly = df_weekly[df_weekly['week'].isin(
-            df_display[df_display['pool_symbol'] == pool]['week'].unique()
-        )]
+    if len(filtered_pools) > 0:
+        st.markdown("---")
+        st.markdown("### 📋 Pools Weekly Analysis")
+        
+        for idx, pool in enumerate(filtered_pools):
+            pool_weekly = df_weekly[df_weekly['week'].isin(
+                df_display[df_display['pool_symbol'] == pool]['week'].unique()
+            )]
         
         if len(pool_weekly) > 0:
             with st.expander(f"{pool}"):
@@ -380,23 +363,3 @@ if '% of Weekly Emissions' in df_display_table.columns:
     df_display_table['% of Weekly Emissions'] = df_display_table['% of Weekly Emissions'].apply(lambda x: f"{x:.2f}%" if pd.notna(x) else "0.00%")
 
 st.dataframe(df_display_table, use_container_width=True, hide_index=True)
-
-st.markdown("---")
-
-st.markdown("### 💡 Notes on Bribe Analysis")
-
-st.info("""
-**Bribe Data Structure (Placeholder)**
-
-Bribe data collection is planned for future implementation. When available, this section will include:
-
-- Correlation between bribes and voting patterns
-- Analysis of pools receiving bribes vs strategic votes
-- Impact of bribes on BAL distribution
-
-**Data Sources to Consider:**
-- Votium (votium.app)
-- Hidden Hand (hiddenhand.finance)
-- Direct on-chain bribe contracts
-- Dune Analytics queries for bribe events
-""")
