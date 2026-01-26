@@ -74,16 +74,24 @@ function applyButtonIds() {
                     console.log(`[Button IDs] Botão ${index} (${name}): "${text}"`);
                 }
                 
-                // Aplica IDs específicos baseado no texto do botão
+                // Aplica IDs que começam com os prefixos corretos (genérico para funcionar com CSS)
                 if (text === 'Top 20' || textLower === 'top 20') {
-                    button.id = 'btn_top20_bribes';
-                    console.log(`[Button IDs] ✅ ID aplicado: btn_top20_bribes`);
+                    if (!button.id || !button.id.startsWith('btn_top20')) {
+                        button.id = 'btn_top20';
+                    }
                 } else if (text === 'Worst 20' || textLower === 'worst 20') {
-                    button.id = 'btn_worst20_bribes';
-                    console.log(`[Button IDs] ✅ ID aplicado: btn_worst20_bribes`);
+                    if (!button.id || !button.id.startsWith('btn_worst20')) {
+                        button.id = 'btn_worst20';
+                    }
                 } else if (text === 'Select All' || textLower === 'select all') {
-                    button.id = 'btn_select_all_bribes';
-                    console.log(`[Button IDs] ✅ ID aplicado: btn_select_all_bribes`);
+                    if (!button.id || !button.id.startsWith('btn_select_all')) {
+                        button.id = 'btn_select_all';
+                    }
+                } else if (text.includes('Logout') || text.includes('🚪') || textLower.includes('logout')) {
+                    if (!button.id || !button.id.startsWith('btn_logout')) {
+                        button.id = 'btn_logout';
+                    }
+                }
                 } else if (text.includes('Show Performance') || text.includes('Performance by Pool') || textLower.includes('performance') || text.includes('🔍')) {
                     button.id = 'btn_performance_by_pool';
                     button.classList.add('performance-button-fallback');

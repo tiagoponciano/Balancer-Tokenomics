@@ -164,8 +164,8 @@ def inject_css():
         }
         
         /* --- BOTÕES PADRÃO (fallback para outros botões) --- */
-        /* Exclui explicitamente os botões com IDs específicos */
-        .stButton > button:not(#btn_top20_bribes):not(#btn_worst20_bribes):not(#btn_select_all_bribes):not(#btn_performance_by_pool):not(.logout-button) {
+        /* Exclui explicitamente os botões com IDs específicos (genéricos e específicos) */
+        .stButton > button:not([id^="btn_top20"]):not([id^="btn_worst20"]):not([id^="btn_select_all"]):not(#btn_performance_by_pool):not([id^="btn_login"]):not([id^="btn_logout"]):not(.logout-button):not([key="logout_btn"]):not([key="login_btn"]) {
             width: 110px;
             background-color: rgba(103, 162, 225, 0.1);
             border: 1px solid rgba(103, 162, 225, 0.3);
@@ -177,14 +177,14 @@ def inject_css():
             overflow: visible;
         }
         
-        .stButton > button:not(#btn_top20_bribes):not(#btn_worst20_bribes):not(#btn_select_all_bribes):not(#btn_performance_by_pool):not(.logout-button):hover {
+        .stButton > button:not([id^="btn_top20"]):not([id^="btn_worst20"]):not([id^="btn_select_all"]):not(#btn_performance_by_pool):not([id^="btn_login"]):not([id^="btn_logout"]):not(.logout-button):not([key="logout_btn"]):not([key="login_btn"]):hover {
             background-color: rgba(103, 162, 225, 0.2);
             border-color: rgba(103, 162, 225, 0.5);
         }
         
-        /* --- BOTÃO TOP 20 --- */
-        #btn_top20_bribes,
-        button#btn_top20_bribes {
+        /* --- BOTÃO TOP 20 (genérico para todas as páginas) --- */
+        button[id^="btn_top20"],
+        [id^="btn_top20"] {
             width: 110px !important;
             min-width: 110px !important;
             max-width: 110px !important;
@@ -203,8 +203,8 @@ def inject_css():
             letter-spacing: 0.03em !important;
         }
         
-        #btn_top20_bribes::before,
-        button#btn_top20_bribes::before {
+        button[id^="btn_top20"]::before,
+        [id^="btn_top20"]::before {
             content: '' !important;
             position: absolute !important;
             top: 0 !important;
@@ -215,8 +215,8 @@ def inject_css():
             transition: left 0.6s ease !important;
         }
         
-        #btn_top20_bribes::after,
-        button#btn_top20_bribes::after {
+        button[id^="btn_top20"]::after,
+        [id^="btn_top20"]::after {
             content: '' !important;
             position: absolute !important;
             inset: 0 !important;
@@ -230,8 +230,8 @@ def inject_css():
             transition: opacity 0.3s !important;
         }
         
-        #btn_top20_bribes:hover,
-        button#btn_top20_bribes:hover {
+        button[id^="btn_top20"]:hover,
+        [id^="btn_top20"]:hover {
             background: linear-gradient(135deg, rgba(103, 162, 225, 0.28) 0%, rgba(103, 162, 225, 0.15) 100%) !important;
             border-color: rgba(103, 162, 225, 0.7) !important;
             transform: translateY(-3px) scale(1.02) !important;
@@ -239,25 +239,25 @@ def inject_css():
             color: #A8C8F5 !important;
         }
         
-        #btn_top20_bribes:hover::before,
-        button#btn_top20_bribes:hover::before {
+        button[id^="btn_top20"]:hover::before,
+        [id^="btn_top20"]:hover::before {
             left: 100% !important;
         }
         
-        #btn_top20_bribes:hover::after,
-        button#btn_top20_bribes:hover::after {
+        button[id^="btn_top20"]:hover::after,
+        [id^="btn_top20"]:hover::after {
             opacity: 1 !important;
         }
         
-        #btn_top20_bribes:active,
-        button#btn_top20_bribes:active {
+        button[id^="btn_top20"]:active,
+        [id^="btn_top20"]:active {
             transform: translateY(-1px) scale(1.01) !important;
             box-shadow: 0 3px 12px rgba(103, 162, 225, 0.2) !important;
         }
         
-        /* --- BOTÃO WORST 20 --- */
-        #btn_worst20_bribes,
-        button#btn_worst20_bribes {
+        /* --- BOTÃO WORST 20 (genérico para todas as páginas) --- */
+        button[id^="btn_worst20"],
+        [id^="btn_worst20"] {
             width: 110px !important;
             min-width: 110px !important;
             max-width: 110px !important;
@@ -276,8 +276,8 @@ def inject_css():
             letter-spacing: 0.03em !important;
         }
         
-        #btn_worst20_bribes::before,
-        button#btn_worst20_bribes::before {
+        button[id^="btn_worst20"]::before,
+        [id^="btn_worst20"]::before {
             content: '' !important;
             position: absolute !important;
             top: 0 !important;
@@ -288,8 +288,8 @@ def inject_css():
             transition: left 0.6s ease !important;
         }
         
-        #btn_worst20_bribes::after,
-        button#btn_worst20_bribes::after {
+        button[id^="btn_worst20"]::after,
+        [id^="btn_worst20"]::after {
             content: '' !important;
             position: absolute !important;
             inset: 0 !important;
@@ -303,8 +303,8 @@ def inject_css():
             transition: opacity 0.3s !important;
         }
         
-        #btn_worst20_bribes:hover,
-        button#btn_worst20_bribes:hover {
+        button[id^="btn_worst20"]:hover,
+        [id^="btn_worst20"]:hover {
             background: linear-gradient(135deg, rgba(103, 162, 225, 0.28) 0%, rgba(103, 162, 225, 0.15) 100%) !important;
             border-color: rgba(103, 162, 225, 0.7) !important;
             transform: translateY(-3px) scale(1.02) !important;
@@ -312,25 +312,25 @@ def inject_css():
             color: #A8C8F5 !important;
         }
         
-        #btn_worst20_bribes:hover::before,
-        button#btn_worst20_bribes:hover::before {
+        button[id^="btn_worst20"]:hover::before,
+        [id^="btn_worst20"]:hover::before {
             left: 100% !important;
         }
         
-        #btn_worst20_bribes:hover::after,
-        button#btn_worst20_bribes:hover::after {
+        button[id^="btn_worst20"]:hover::after,
+        [id^="btn_worst20"]:hover::after {
             opacity: 1 !important;
         }
         
-        #btn_worst20_bribes:active,
-        button#btn_worst20_bribes:active {
+        button[id^="btn_worst20"]:active,
+        [id^="btn_worst20"]:active {
             transform: translateY(-1px) scale(1.01) !important;
             box-shadow: 0 3px 12px rgba(103, 162, 225, 0.2) !important;
         }
         
-        /* --- BOTÃO SELECT ALL --- */
-        #btn_select_all_bribes,
-        button#btn_select_all_bribes {
+        /* --- BOTÃO SELECT ALL (genérico para todas as páginas) --- */
+        button[id^="btn_select_all"],
+        [id^="btn_select_all"] {
             width: 110px !important;
             min-width: 110px !important;
             max-width: 110px !important;
@@ -349,8 +349,8 @@ def inject_css():
             letter-spacing: 0.03em !important;
         }
         
-        #btn_select_all_bribes::before,
-        button#btn_select_all_bribes::before {
+        button[id^="btn_select_all"]::before,
+        [id^="btn_select_all"]::before {
             content: '' !important;
             position: absolute !important;
             top: 0 !important;
@@ -361,8 +361,8 @@ def inject_css():
             transition: left 0.6s ease !important;
         }
         
-        #btn_select_all_bribes::after,
-        button#btn_select_all_bribes::after {
+        button[id^="btn_select_all"]::after,
+        [id^="btn_select_all"]::after {
             content: '' !important;
             position: absolute !important;
             inset: 0 !important;
@@ -376,8 +376,8 @@ def inject_css():
             transition: opacity 0.3s !important;
         }
         
-        #btn_select_all_bribes:hover,
-        button#btn_select_all_bribes:hover {
+        button[id^="btn_select_all"]:hover,
+        [id^="btn_select_all"]:hover {
             background: linear-gradient(135deg, rgba(103, 162, 225, 0.28) 0%, rgba(103, 162, 225, 0.15) 100%) !important;
             border-color: rgba(103, 162, 225, 0.7) !important;
             transform: translateY(-3px) scale(1.02) !important;
@@ -385,18 +385,18 @@ def inject_css():
             color: #A8C8F5 !important;
         }
         
-        #btn_select_all_bribes:hover::before,
-        button#btn_select_all_bribes:hover::before {
+        button[id^="btn_select_all"]:hover::before,
+        [id^="btn_select_all"]:hover::before {
             left: 100% !important;
         }
         
-        #btn_select_all_bribes:hover::after,
-        button#btn_select_all_bribes:hover::after {
+        button[id^="btn_select_all"]:hover::after,
+        [id^="btn_select_all"]:hover::after {
             opacity: 1 !important;
         }
         
-        #btn_select_all_bribes:active,
-        button#btn_select_all_bribes:active {
+        button[id^="btn_select_all"]:active,
+        [id^="btn_select_all"]:active {
             transform: translateY(-1px) scale(1.01) !important;
             box-shadow: 0 3px 12px rgba(103, 162, 225, 0.2) !important;
         }
@@ -633,9 +633,171 @@ def inject_css():
             height: 56px !important;
         }
 
-        /* --- LOGOUT BUTTON --- */
-        .logout-button {
-            /* Keep existing logout button styles */
+        /* --- BOTÃO LOGIN --- */
+        button[id^="btn_login"],
+        [id^="btn_login"],
+        button[key="login_btn"],
+        form button[type="submit"] {
+            width: 110px !important;
+            min-width: 110px !important;
+            max-width: 110px !important;
+            height: 44px !important;
+            padding: 0.625rem 0.5rem !important;
+            font-size: 0.8125rem !important;
+            font-weight: 600 !important;
+            background: linear-gradient(135deg, rgba(103, 162, 225, 0.18) 0%, rgba(103, 162, 225, 0.08) 100%) !important;
+            border: 1.5px solid rgba(103, 162, 225, 0.45) !important;
+            color: #8BB5F0 !important;
+            border-radius: 12px !important;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+            box-shadow: 0 3px 12px rgba(103, 162, 225, 0.15) !important;
+            position: relative !important;
+            overflow: hidden !important;
+            letter-spacing: 0.03em !important;
+        }
+        
+        button[id^="btn_login"]::before,
+        [id^="btn_login"]::before,
+        button[key="login_btn"]::before,
+        form button[type="submit"]::before {
+            content: '' !important;
+            position: absolute !important;
+            top: 0 !important;
+            left: -100% !important;
+            width: 100% !important;
+            height: 100% !important;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.15), transparent) !important;
+            transition: left 0.6s ease !important;
+        }
+        
+        button[id^="btn_login"]::after,
+        [id^="btn_login"]::after,
+        button[key="login_btn"]::after,
+        form button[type="submit"]::after {
+            content: '' !important;
+            position: absolute !important;
+            inset: 0 !important;
+            border-radius: 12px !important;
+            padding: 1.5px !important;
+            background: linear-gradient(135deg, rgba(103, 162, 225, 0.6), rgba(103, 162, 225, 0.2)) !important;
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0) !important;
+            -webkit-mask-composite: xor !important;
+            mask-composite: exclude !important;
+            opacity: 0 !important;
+            transition: opacity 0.3s !important;
+        }
+        
+        button[id^="btn_login"]:hover,
+        [id^="btn_login"]:hover,
+        button[key="login_btn"]:hover,
+        form button[type="submit"]:hover {
+            background: linear-gradient(135deg, rgba(103, 162, 225, 0.28) 0%, rgba(103, 162, 225, 0.15) 100%) !important;
+            border-color: rgba(103, 162, 225, 0.7) !important;
+            transform: translateY(-3px) scale(1.02) !important;
+            box-shadow: 0 6px 20px rgba(103, 162, 225, 0.3) !important;
+            color: #A8C8F5 !important;
+        }
+        
+        button[id^="btn_login"]:hover::before,
+        [id^="btn_login"]:hover::before,
+        button[key="login_btn"]:hover::before,
+        form button[type="submit"]:hover::before {
+            left: 100% !important;
+        }
+        
+        button[id^="btn_login"]:hover::after,
+        [id^="btn_login"]:hover::after,
+        button[key="login_btn"]:hover::after,
+        form button[type="submit"]:hover::after {
+            opacity: 1 !important;
+        }
+        
+        button[id^="btn_login"]:active,
+        [id^="btn_login"]:active,
+        button[key="login_btn"]:active,
+        form button[type="submit"]:active {
+            transform: translateY(-1px) scale(1.01) !important;
+            box-shadow: 0 3px 12px rgba(103, 162, 225, 0.2) !important;
+        }
+        
+        /* --- BOTÃO LOGOUT --- */
+        button[id^="btn_logout"],
+        [id^="btn_logout"],
+        button[key="logout_btn"] {
+            width: 110px !important;
+            min-width: 110px !important;
+            max-width: 110px !important;
+            height: 44px !important;
+            padding: 0.625rem 0.5rem !important;
+            font-size: 0.8125rem !important;
+            font-weight: 600 !important;
+            background: linear-gradient(135deg, rgba(103, 162, 225, 0.18) 0%, rgba(103, 162, 225, 0.08) 100%) !important;
+            border: 1.5px solid rgba(103, 162, 225, 0.45) !important;
+            color: #8BB5F0 !important;
+            border-radius: 12px !important;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+            box-shadow: 0 3px 12px rgba(103, 162, 225, 0.15) !important;
+            position: relative !important;
+            overflow: hidden !important;
+            letter-spacing: 0.03em !important;
+        }
+        
+        button[id^="btn_logout"]::before,
+        [id^="btn_logout"]::before,
+        button[key="logout_btn"]::before {
+            content: '' !important;
+            position: absolute !important;
+            top: 0 !important;
+            left: -100% !important;
+            width: 100% !important;
+            height: 100% !important;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.15), transparent) !important;
+            transition: left 0.6s ease !important;
+        }
+        
+        button[id^="btn_logout"]::after,
+        [id^="btn_logout"]::after,
+        button[key="logout_btn"]::after {
+            content: '' !important;
+            position: absolute !important;
+            inset: 0 !important;
+            border-radius: 12px !important;
+            padding: 1.5px !important;
+            background: linear-gradient(135deg, rgba(103, 162, 225, 0.6), rgba(103, 162, 225, 0.2)) !important;
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0) !important;
+            -webkit-mask-composite: xor !important;
+            mask-composite: exclude !important;
+            opacity: 0 !important;
+            transition: opacity 0.3s !important;
+        }
+        
+        button[id^="btn_logout"]:hover,
+        [id^="btn_logout"]:hover,
+        button[key="logout_btn"]:hover {
+            background: linear-gradient(135deg, rgba(103, 162, 225, 0.28) 0%, rgba(103, 162, 225, 0.15) 100%) !important;
+            border-color: rgba(103, 162, 225, 0.7) !important;
+            transform: translateY(-3px) scale(1.02) !important;
+            box-shadow: 0 6px 20px rgba(103, 162, 225, 0.3) !important;
+            color: #A8C8F5 !important;
+        }
+        
+        button[id^="btn_logout"]:hover::before,
+        [id^="btn_logout"]:hover::before,
+        button[key="logout_btn"]:hover::before {
+            left: 100% !important;
+        }
+        
+        button[id^="btn_logout"]:hover::after,
+        [id^="btn_logout"]:hover::after,
+        button[key="logout_btn"]:hover::after {
+            opacity: 1 !important;
+        }
+        
+        button[id^="btn_logout"]:active,
+        [id^="btn_logout"]:active,
+        button[key="logout_btn"]:active {
+            transform: translateY(-1px) scale(1.01) !important;
+            box-shadow: 0 3px 12px rgba(103, 162, 225, 0.2) !important;
         }
         
         /* --- MULTISELECT STYLING (BASEWEB) --- */
@@ -785,8 +947,32 @@ def inject_css():
                         
                         const textLower = text.toLowerCase();
                         
-                        // Se contém "Show Performance" ou "Performance by Pool" ou emoji de lupa
-                        if (text.includes('Show Performance') || text.includes('Performance by Pool') || textLower.includes('performance') || text.includes('🔍')) {
+                        // Detecta botões "Top 20", "Worst 20" e "Select All" em todas as páginas
+                        // Aplica IDs que começam com os prefixos corretos para que o CSS funcione
+                        if (text === 'Top 20' || textLower === 'top 20') {
+                            // Garante que o ID comece com btn_top20
+                            if (!button.id || !button.id.startsWith('btn_top20')) {
+                                button.id = 'btn_top20';
+                            }
+                        } else if (text === 'Worst 20' || textLower === 'worst 20') {
+                            if (!button.id || !button.id.startsWith('btn_worst20')) {
+                                button.id = 'btn_worst20';
+                            }
+                        } else if (text === 'Select All' || textLower === 'select all') {
+                            if (!button.id || !button.id.startsWith('btn_select_all')) {
+                                button.id = 'btn_select_all';
+                            }
+                        } else if (text === 'Login' || textLower === 'login') {
+                            // Botão de login
+                            if (!button.id || !button.id.startsWith('btn_login')) {
+                                button.id = 'btn_login';
+                            }
+                        } else if (text.includes('Logout') || text.includes('🚪') || textLower.includes('logout')) {
+                            // Botão de logout
+                            if (!button.id || !button.id.startsWith('btn_logout')) {
+                                button.id = 'btn_logout';
+                            }
+                        } else if (text.includes('Show Performance') || text.includes('Performance by Pool') || textLower.includes('performance') || text.includes('🔍')) {
                             // Aplica ID se ainda não tiver
                             if (!button.id || button.id !== 'btn_performance_by_pool') {
                                 button.id = 'btn_performance_by_pool';
@@ -902,19 +1088,8 @@ def check_authentication():
             border-color: #67A2E1 !important;
             box-shadow: 0 0 0 3px rgba(103, 162, 225, 0.2) !important;
         }
-        .stButton > button {
-            background: linear-gradient(135deg, #67A2E1 0%, #B1ACF1 100%) !important;
-            border: none !important;
-            color: white !important;
-            font-weight: 600 !important;
-            padding: 0.75rem 2rem !important;
-            border-radius: 8px !important;
-            transition: all 0.3s !important;
-        }
-        .stButton > button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(103, 162, 225, 0.4) !important;
-        }
+        /* CSS do botão de login já está no inject_css() */
+        /* Mantém apenas estilos específicos para outros botões na página de login se necessário */
     </style>
     """, unsafe_allow_html=True)
     
@@ -928,7 +1103,7 @@ def check_authentication():
             username = st.text_input("Username", placeholder="Enter your username", key="login_username")
             password = st.text_input("Password", type="password", placeholder="Enter your password", key="login_password")
             
-            submitted = st.form_submit_button("Login", use_container_width=True)
+            submitted = st.form_submit_button("Login", use_container_width=True, key="login_btn")
             
             if submitted:
                 if username == CORRECT_USERNAME and password == CORRECT_PASSWORD:
@@ -953,29 +1128,8 @@ def check_authentication():
 
 def show_logout_button():
     """Show logout button in top right corner"""
-    # Add CSS styling for logout button
-    st.markdown("""
-    <style>
-        button[key="logout_btn"] {
-            background-color: rgba(177, 172, 241, 0.2) !important;
-            border: 1px solid #B1ACF1 !important;
-            color: #B1ACF1 !important;
-            font-weight: 500 !important;
-            padding: 0.5rem 1rem !important;
-            border-radius: 8px !important;
-            font-size: 0.875rem !important;
-            min-width: 100px !important;
-            transition: all 0.2s !important;
-        }
-        button[key="logout_btn"]:hover {
-            background-color: rgba(177, 172, 241, 0.3) !important;
-            border-color: #B1ACF1 !important;
-            transform: translateY(-1px);
-        }
-    </style>
-    """, unsafe_allow_html=True)
-    
     # Create button (will be positioned in the column passed to this function)
+    # CSS já está aplicado no inject_css()
     if st.button("🚪 Logout", key="logout_btn"):
         st.session_state.authenticated = False
         st.rerun()
