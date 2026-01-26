@@ -16,7 +16,6 @@ if not utils.check_authentication():
 
 utils.inject_css()
 
-# Script será injetado depois dos botões serem renderizados
 import streamlit.components.v1 as components
 
 try:
@@ -127,10 +126,9 @@ if st.session_state.pool_filter_mode_bribes in ['top20', 'worst20']:
         st.session_state.show_performance_by_pool = False
         st.rerun()
 
-# Script para aplicar IDs específicos aos botões - executado DEPOIS dos botões serem renderizados
 components.html("""
 <script>
-console.log('[Button IDs] Script carregado via components.html (bribes_analysis.py)!');
+console.log('[Button IDs] Script loaded via components.html (bribes_analysis.py)!');
 
 function applyButtonIds() {
     const contexts = [
@@ -168,35 +166,30 @@ function applyButtonIds() {
                 
                 const textLower = text.toLowerCase();
                 
-                // Aplica IDs que começam com os prefixos corretos
+                // Apply IDs with correct prefixes
                 if (text === 'Top 20' || textLower === 'top 20') {
                     if (!button.id || !button.id.startsWith('btn_top20')) {
                         button.id = 'btn_top20';
-                        console.log(`[Button IDs] ✅ ID aplicado: btn_top20`);
                     }
                 } else if (text === 'Worst 20' || textLower === 'worst 20') {
                     if (!button.id || !button.id.startsWith('btn_worst20')) {
                         button.id = 'btn_worst20';
-                        console.log(`[Button IDs] ✅ ID aplicado: btn_worst20`);
                     }
                 } else if (text === 'Select All' || textLower === 'select all') {
                     if (!button.id || !button.id.startsWith('btn_select_all')) {
                         button.id = 'btn_select_all';
-                        console.log(`[Button IDs] ✅ ID aplicado: btn_select_all`);
                     }
                 } else if (text.includes('Logout') || text.includes('🚪') || textLower.includes('logout')) {
                     if (!button.id || !button.id.startsWith('btn_logout')) {
                         button.id = 'btn_logout';
-                        console.log(`[Button IDs] ✅ ID aplicado: btn_logout`);
                     }
                 } else if (text.includes('Show Performance') || text.includes('Performance by Pool') || textLower.includes('performance') || text.includes('🔍')) {
                     if (!button.id || button.id !== 'btn_performance_by_pool') {
                         button.id = 'btn_performance_by_pool';
                         button.classList.add('performance-button-fallback');
                         button.setAttribute('data-button-type', 'performance');
-                        console.log(`[Button IDs] ✅ ID aplicado: btn_performance_by_pool`);
                         
-                        // Aplica TODOS os estilos inline diretamente (máxima prioridade)
+                        // Apply all inline styles directly (maximum priority)
                         const styles = {
                             'width': '250px',
                             'min-width': '250px',
@@ -220,25 +213,18 @@ function applyButtonIds() {
                         });
                         
                         perfButtonFound = true;
-                        console.log(`[Button IDs] ✅ Estilos inline aplicados ao botão performance!`);
                     }
                 }
             });
             
             totalButtons += buttons.length;
         } catch(e) {
-            console.error(`[Button IDs] Erro no contexto ${name}:`, e);
+            // Silent error handling
         }
     });
-    
-    if (!perfButtonFound && totalButtons > 0) {
-        console.log('[Button IDs] ⚠️ Botão performance NÃO encontrado!');
-    }
-    
-    console.log(`[Button IDs] Total de botões processados: ${totalButtons}`);
 }
 
-// Executa imediatamente e após delays
+// Execute immediately and after delays
 applyButtonIds();
 setTimeout(applyButtonIds, 100);
 setTimeout(applyButtonIds, 500);
@@ -246,7 +232,7 @@ setTimeout(applyButtonIds, 1000);
 setTimeout(applyButtonIds, 2000);
 setInterval(applyButtonIds, 3000);
 
-// Observa mudanças no DOM
+// Observe DOM changes
 if (window.MutationObserver) {
     const observer = new MutationObserver(() => {
         setTimeout(applyButtonIds, 100);
@@ -289,15 +275,6 @@ for col in ['pool_title', 'pool_name', 'pool_symbol', 'pool', 'gauge', 'gauge_ad
         pool_col = col
         break
 
-# Debug: Show column info if needed
-if st.sidebar.checkbox("🔍 Debug Pool Matching", value=False, key="debug_pool_matching_bribes"):
-    st.sidebar.write(f"**Pool Match Column:** {pool_match_col}")
-    st.sidebar.write(f"**Pool Col (Aggregation):** {pool_col}")
-    if pool_match_col and not df_bribes.empty:
-        st.sidebar.write(f"**Sample Bribes Pool Names:**")
-        sample_pools = df_bribes[pool_match_col].dropna().unique()[:5]
-        for p in sample_pools:
-            st.sidebar.write(f"  - {p}")
 
 # Helper function to load aggregated CSV files (tries multiple paths)
 def load_aggregated_csv(filename):
@@ -442,7 +419,7 @@ if st.session_state.pool_filter_mode_bribes == 'top20':
         st.error("❌ File `data/top20_pools_bribes_aggregated.csv` not found. Please run the script `create_top_worst_bribes_csv.py` first.")
         st.stop()
     except Exception as e:
-        st.error(f"❌ Erro ao carregar dados: {str(e)}")
+        st.error(f"❌ Error loading data: {str(e)}")
         st.stop()
 
 elif st.session_state.pool_filter_mode_bribes == 'worst20':
@@ -513,7 +490,7 @@ elif st.session_state.pool_filter_mode_bribes == 'worst20':
         st.error("❌ File `data/worst20_pools_bribes_aggregated.csv` not found. Please run the script `create_top_worst_bribes_csv.py` first.")
         st.stop()
     except Exception as e:
-        st.error(f"❌ Erro ao carregar dados: {str(e)}")
+        st.error(f"❌ Error loading data: {str(e)}")
         st.stop()
 
 else:
@@ -528,7 +505,7 @@ else:
 col_title, col_logout = st.columns([1, 0.1])
 with col_title:
     st.markdown('<div class="page-title">💰 Bribes Analysis</div>', unsafe_allow_html=True)
-    st.markdown('<div class="page-subtitle">Comprehensive analysis of bribes, voting patterns, and their impact on BAL distribution</div>', unsafe_allow_html=True)
+    st.markdown('<div class="page-subtitle">Comprehensive analysis of bribes, voting patterns, and their impact on BAL token distribution</div>', unsafe_allow_html=True)
 with col_logout:
     utils.show_logout_button()
 
@@ -541,12 +518,6 @@ if pool_col is None:
     st.dataframe(df_bribes.head(5))
     st.stop()
 
-# Debug: Show column info
-if st.sidebar.checkbox("🔍 Show Data Info", value=False):
-    st.sidebar.write(f"**Pool Column:** {pool_col}")
-    st.sidebar.write(f"**Total Rows:** {len(df_bribes)}")
-    st.sidebar.write(f"**Columns:** {len(df_bribes.columns)}")
-    st.sidebar.dataframe(df_bribes.head(3))
 
 try:
     # Identify bribe-related columns - always use df_bribes (original) for column identification
@@ -574,11 +545,9 @@ try:
                 votes_col = df_cols_lower[col_lower]
                 break
 
-    # Try to find BAL column (may not exist in this dataset)
-    for col_lower in ['bal_received', 'bal_emitted', 'bal', 'bal_amount', 'bal_tokens', 'bal_emissions']:
-        if col_lower in df_cols_lower:
-            bal_col = df_cols_lower[col_lower]
-            break
+    # BAL column not available in bribes dataset
+    # This data would come from the main financial dataset, but we're using only bribes data here
+    bal_col = None
     
     # Also check for total_bribes_periodo which might be useful
     total_bribes_col = None
@@ -650,45 +619,16 @@ if not pool_bribes.empty:
             0
         )
 
-    if bal_col and bal_col in pool_bribes.columns:
-        pool_bribes['bribe_efficiency'] = np.where(
-            pool_bribes[bribe_col] > 0,
-            pool_bribes[bal_col] / pool_bribes[bribe_col],
-            0
-        )
-    else:
-        # If no BAL column, create efficiency metrics based on available data
-        if votes_col and votes_col in pool_bribes.columns:
-            # Votes per USD as proxy for efficiency
-            pool_bribes['bribe_efficiency'] = np.where(
-                pool_bribes[bribe_col] > 0,
-                pool_bribes[votes_col] / pool_bribes[bribe_col] * 1000,  # Votes per USD as proxy
-                0
-            )
-        elif 'total_bribes_periodo' in pool_bribes.columns:
-            # Use total_bribes_periodo / amount_usdc as a ratio metric
-            pool_bribes['bribe_efficiency'] = np.where(
-                pool_bribes[bribe_col] > 0,
-                pool_bribes['total_bribes_periodo'] / pool_bribes[bribe_col],
-                0
-            )
-        else:
-            # No efficiency metric available
-            pool_bribes['bribe_efficiency'] = 0
-    
-    # Ensure bribe_efficiency is numeric (convert from object if needed)
-    if 'bribe_efficiency' in pool_bribes.columns:
-        pool_bribes['bribe_efficiency'] = pd.to_numeric(pool_bribes['bribe_efficiency'], errors='coerce').fillna(0)
 else:
     # Create empty columns for consistency when DataFrame is empty
     if pool_bribes.empty:
         # Create empty DataFrame with proper structure and numeric columns
-        empty_cols = [pool_col, bribe_col, 'bribe_efficiency']
+        empty_cols = [pool_col, bribe_col]
         if votes_col:
             empty_cols.append('bribe_per_vote')
         pool_bribes = pd.DataFrame(columns=empty_cols)
         # Ensure numeric columns have proper dtype
-        for col in ['bribe_efficiency', 'bribe_per_vote']:
+        for col in ['bribe_per_vote']:
             if col in pool_bribes.columns:
                 pool_bribes[col] = pool_bribes[col].astype(float)
 
@@ -768,7 +708,7 @@ elif st.session_state.pool_filter_mode_bribes == 'worst20':
         all_pools_for_ranking = df_ranking[['pool_symbol', 'pool_title', 'pool_name', 'amount_usdc']].copy()
         all_pools_for_ranking = all_pools_for_ranking.rename(columns={'pool_symbol': 'pool', 'amount_usdc': 'bribe_amount'})
 
-tab1, tab2, tab3, tab4 = st.tabs(["💰 Top Bribes", "⚡ Best Efficiency", "📈 Most Votes", "🗳️ veBAL Votes"])
+tab1, tab2, tab3 = st.tabs(["💰 Top Bribes", "📈 Most Votes", "🗳️ veBAL Votes"])
 
 with tab1:
     if all_pools_for_ranking is not None and not all_pools_for_ranking.empty:
@@ -828,77 +768,6 @@ with tab1:
 
 with tab2:
     if all_pools_for_ranking is not None and not all_pools_for_ranking.empty:
-        # Show all pools from CSV, merge with efficiency data from df_bribes_display
-        ranking_df = all_pools_for_ranking[['pool', 'pool_title', 'pool_name']].copy()
-        
-        # Calculate efficiency from df_bribes_display if available
-        efficiency_dict = {}
-        if not df_bribes_display.empty and bribe_col in df_bribes_display.columns:
-            # Group by pool and calculate efficiency
-            for pool_identifier in ['pool_title', 'pool_name', 'pool_symbol']:
-                if pool_identifier in df_bribes_display.columns:
-                    pool_grouped = df_bribes_display.groupby(pool_identifier).agg({
-                        bribe_col: 'sum'
-                    }).reset_index()
-                    
-                    # Calculate efficiency (bribes per vote or similar metric)
-                    for idx, row in pool_grouped.iterrows():
-                        pool_key = str(row[pool_identifier]).upper().strip()
-                        bribe_sum = row[bribe_col]
-                        # Simple efficiency: use bribe amount as proxy (or calculate from votes if available)
-                        if 'vebal_votes' in df_bribes_display.columns:
-                            votes_sum = df_bribes_display[df_bribes_display[pool_identifier] == row[pool_identifier]]['vebal_votes'].max()
-                            if votes_sum and votes_sum > 0:
-                                efficiency_dict[pool_key] = bribe_sum / votes_sum if votes_sum > 0 else 0
-                            else:
-                                efficiency_dict[pool_key] = 0
-                        else:
-                            efficiency_dict[pool_key] = bribe_sum / 1000 if bribe_sum > 0 else 0  # Simple proxy
-        
-        # Match efficiency
-        def get_efficiency(row):
-            pool_val = str(row['pool']).upper().strip()
-            title_val = str(row.get('pool_title', '')).upper().strip()
-            name_val = str(row.get('pool_name', '')).upper().strip()
-            
-            if pool_val in efficiency_dict:
-                return efficiency_dict[pool_val]
-            elif title_val in efficiency_dict:
-                return efficiency_dict[title_val]
-            elif name_val in efficiency_dict:
-                return efficiency_dict[name_val]
-            else:
-                return 0
-        
-        ranking_df['Bribe Efficiency'] = ranking_df.apply(get_efficiency, axis=1)
-        
-        # Sort by efficiency descending
-        ranking_df = ranking_df.sort_values('Bribe Efficiency', ascending=False)
-        
-        # Display
-        display_df = ranking_df[['pool', 'Bribe Efficiency']].copy()
-        display_df.columns = ['Pool', 'Bribe Efficiency']
-        display_df['Bribe Efficiency'] = display_df['Bribe Efficiency'].apply(
-            lambda x: f"{float(x):.3f}" if pd.notna(x) and float(x) > 0 else "0.000"
-        )
-        st.dataframe(display_df, use_container_width=True, hide_index=True)
-    elif 'bribe_efficiency' in pool_bribes.columns and not pool_bribes.empty:
-        # Fallback: show from pool_bribes
-        pool_bribes['bribe_efficiency'] = pd.to_numeric(pool_bribes['bribe_efficiency'], errors='coerce').fillna(0)
-        efficiency_data = pool_bribes[pool_bribes['bribe_efficiency'] > 0]
-        if not efficiency_data.empty and len(efficiency_data) > 0:
-            efficiency_data['bribe_efficiency'] = pd.to_numeric(efficiency_data['bribe_efficiency'], errors='coerce').fillna(0)
-            top_efficiency = efficiency_data.nlargest(20, 'bribe_efficiency')[[pool_col, 'bribe_efficiency']].copy()
-            top_efficiency.columns = ['Pool', 'Bribe Efficiency']
-            top_efficiency['Bribe Efficiency'] = top_efficiency['Bribe Efficiency'].apply(lambda x: f"{x:.3f}")
-            st.dataframe(top_efficiency, use_container_width=True, hide_index=True)
-        else:
-            st.info("No pools with positive efficiency found for the selected filter.")
-    else:
-        st.info("Efficiency data not available")
-
-with tab3:
-    if all_pools_for_ranking is not None and not all_pools_for_ranking.empty:
         # Show all pools from CSV, merge with votes data from df_bribes_display
         ranking_df = all_pools_for_ranking[['pool', 'pool_title', 'pool_name']].copy()
         
@@ -954,7 +823,7 @@ with tab3:
     else:
         st.info("Votes data not available")
 
-with tab4:
+with tab3:
     if all_pools_for_ranking is not None and not all_pools_for_ranking.empty:
         # Show all pools from CSV, merge with veBAL votes data from df_bribes_display
         ranking_df = all_pools_for_ranking[['pool', 'pool_title', 'pool_name']].copy()
@@ -1197,7 +1066,7 @@ if st.session_state.show_performance_by_pool:
         # Show pool data even if empty (to show all pools from category)
         with st.expander(f"📊 {pool}", expanded=False):
             if not pool_bribe_data.empty:
-                col_p1, col_p2, col_p3, col_p4, col_p5 = st.columns(5)
+                col_p1, col_p2, col_p3 = st.columns(3)
                 
                 # Get values from pool_bribe_data
                 pool_bribes_val = 0
@@ -1207,8 +1076,6 @@ if st.session_state.show_performance_by_pool:
                     pool_bribes_val = pd.to_numeric(pool_bribe_data['amount_usdc'].iloc[0], errors='coerce') if pd.notna(pool_bribe_data['amount_usdc'].iloc[0]) else 0
                 
                 pool_votes_val = pd.to_numeric(pool_bribe_data[votes_col].iloc[0], errors='coerce') if votes_col and votes_col in pool_bribe_data.columns and pd.notna(pool_bribe_data[votes_col].iloc[0]) else 0
-                pool_bal_val = pd.to_numeric(pool_bribe_data[bal_col].iloc[0], errors='coerce') if bal_col and bal_col in pool_bribe_data.columns and pd.notna(pool_bribe_data[bal_col].iloc[0]) else 0
-                pool_eff = pd.to_numeric(pool_bribe_data['bribe_efficiency'].iloc[0], errors='coerce') if 'bribe_efficiency' in pool_bribe_data.columns and pd.notna(pool_bribe_data['bribe_efficiency'].iloc[0]) else 0
                 pool_vebal_votes = pd.to_numeric(pool_bribe_data['vebal_votes'].iloc[0], errors='coerce') if 'vebal_votes' in pool_bribe_data.columns and pd.notna(pool_bribe_data['vebal_votes'].iloc[0]) else 0
                 pool_vebal_pct = pd.to_numeric(pool_bribe_data['vebal_pct_votes'].iloc[0], errors='coerce') if 'vebal_pct_votes' in pool_bribe_data.columns and pd.notna(pool_bribe_data['vebal_pct_votes'].iloc[0]) else 0
                 pool_vebal_rank = pd.to_numeric(pool_bribe_data['vebal_ranking'].iloc[0], errors='coerce') if 'vebal_ranking' in pool_bribe_data.columns and pd.notna(pool_bribe_data['vebal_ranking'].iloc[0]) else None
@@ -1218,10 +1085,6 @@ if st.session_state.show_performance_by_pool:
                 with col_p2:
                     st.metric("Votes Received", f"{pool_votes_val:,.0f}")
                 with col_p3:
-                    st.metric("BAL Received", f"{pool_bal_val:,.0f}")
-                with col_p4:
-                    st.metric("Efficiency", f"{pool_eff:.3f}")
-                with col_p5:
                     if pool_vebal_votes > 0:
                         rank_text = f"#{int(pool_vebal_rank)}" if pool_vebal_rank else "N/A"
                         st.metric("veBAL Votes", f"{pool_vebal_votes:,.0f}", delta=f"{pool_vebal_pct*100:.2f}% share", help=f"Ranking: {rank_text}")
@@ -1235,7 +1098,7 @@ if st.session_state.show_performance_by_pool:
                     ]
                     if not csv_match.empty:
                         csv_row = csv_match.iloc[0]
-                        col_p1, col_p2, col_p3, col_p4, col_p5 = st.columns(5)
+                        col_p1, col_p2, col_p3 = st.columns(3)
                         
                         pool_bribes_val = csv_row.get('amount_usdc', 0) if pd.notna(csv_row.get('amount_usdc')) else 0
                         
@@ -1244,10 +1107,6 @@ if st.session_state.show_performance_by_pool:
                         with col_p2:
                             st.metric("Votes Received", "N/A", help="No votes data available")
                         with col_p3:
-                            st.metric("BAL Received", "N/A", help="No BAL data available")
-                        with col_p4:
-                            st.metric("Efficiency", "N/A", help="No efficiency data available")
-                        with col_p5:
                             st.metric("veBAL Votes", "N/A", help="No veBAL votes data available")
                     else:
                         st.info("No data available for this pool")
@@ -1262,19 +1121,17 @@ st.markdown("### 📈 Visualizations")
 viz_col1, viz_col2, viz_col3 = st.columns(3)
 
 with viz_col1:
-    if bribe_col in pool_bribes.columns and 'bribe_efficiency' in pool_bribes.columns and not pool_bribes.empty:
+    if bribe_col in pool_bribes.columns and not pool_bribes.empty:
         scatter_data = pool_bribes[pool_bribes[bribe_col] > 0].copy()
         if not scatter_data.empty:
-            # Ensure bribe_efficiency is numeric
-            scatter_data['bribe_efficiency'] = pd.to_numeric(scatter_data['bribe_efficiency'], errors='coerce').fillna(0)
             fig_scatter = px.scatter(
                 scatter_data,
-                x=bribe_col,
-                y='bribe_efficiency',
+                x=pool_col,
+                y=bribe_col,
                 hover_data=[pool_col],
-                title="💰 Bribe Amount vs Efficiency",
-                labels={bribe_col: 'Total Bribes (USD)', 'bribe_efficiency': 'Bribe Efficiency (BAL/USD)'},
-                color='bribe_efficiency',
+                title="💰 Bribe Amount by Pool",
+                labels={bribe_col: 'Total Bribes (USD)', pool_col: 'Pool'},
+                color=bribe_col,
                 color_continuous_scale='Viridis',
                 size=bribe_col,
                 size_max=20
@@ -1284,14 +1141,14 @@ with viz_col1:
                 paper_bgcolor='rgba(0,0,0,0)',
                 font_color='white',
                 title=dict(font=dict(color='white', size=16)),
-                xaxis=dict(gridcolor='rgba(255,255,255,0.1)'),
+                xaxis=dict(gridcolor='rgba(255,255,255,0.1)', tickangle=-45),
                 yaxis=dict(gridcolor='rgba(255,255,255,0.1)')
             )
             st.plotly_chart(fig_scatter, use_container_width=True)
         else:
             st.info("No data available for scatter plot")
     else:
-        st.info("Bribe efficiency data not available")
+        st.info("Bribe data not available")
 
 with viz_col2:
     # Use veBAL votes instead of votes_col for the scatter plot
@@ -1464,27 +1321,21 @@ if st.session_state.pool_filter_mode_bribes == 'all':
             pool_bribe_data = pd.DataFrame()
         if not pool_bribe_data.empty:
             with st.expander(f"📊 {pool}", expanded=False):
-                col_p1, col_p2, col_p3, col_p4 = st.columns(4)
+                col_p1, col_p2, col_p3 = st.columns(3)
                 
                 pool_bribes_val = pool_bribe_data[bribe_col].iloc[0] if bribe_col in pool_bribe_data.columns else 0
                 pool_votes_val = pool_bribe_data[votes_col].iloc[0] if votes_col and votes_col in pool_bribe_data.columns else 0
-                pool_bal_val = pool_bribe_data[bal_col].iloc[0] if bal_col and bal_col in pool_bribe_data.columns else 0
-                pool_eff = pool_bribe_data['bribe_efficiency'].iloc[0] if 'bribe_efficiency' in pool_bribe_data.columns else 0
                 pool_vebal_votes = pool_bribe_data['vebal_votes'].iloc[0] if 'vebal_votes' in pool_bribe_data.columns and pd.notna(pool_bribe_data['vebal_votes'].iloc[0]) else 0
                 pool_vebal_pct = pool_bribe_data['vebal_pct_votes'].iloc[0] if 'vebal_pct_votes' in pool_bribe_data.columns and pd.notna(pool_bribe_data['vebal_pct_votes'].iloc[0]) else 0
                 pool_vebal_rank = pool_bribe_data['vebal_ranking'].iloc[0] if 'vebal_ranking' in pool_bribe_data.columns and pd.notna(pool_bribe_data['vebal_ranking'].iloc[0]) else None
                 
-                col_p1, col_p2, col_p3, col_p4, col_p5 = st.columns(5)
+                col_p1, col_p2, col_p3 = st.columns(3)
                 
                 with col_p1:
                     st.metric("Total Bribes", f"${pool_bribes_val:,.0f}")
                 with col_p2:
                     st.metric("Votes Received", f"{pool_votes_val:,.0f}")
                 with col_p3:
-                    st.metric("BAL Received", f"{pool_bal_val:,.0f}")
-                with col_p4:
-                    st.metric("Efficiency", f"{pool_eff:.3f}")
-                with col_p5:
                     if pool_vebal_votes > 0:
                         rank_text = f"#{int(pool_vebal_rank)}" if pool_vebal_rank else "N/A"
                         st.metric("veBAL Votes", f"{pool_vebal_votes:,.0f}", delta=f"{pool_vebal_pct*100:.2f}% share", help=f"Ranking: {rank_text}")
