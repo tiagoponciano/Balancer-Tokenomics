@@ -101,8 +101,6 @@ if df.empty:
     st.error("❌ Unable to load data.")
     st.stop()
 
-df_sim = utils.run_simulation_sidebar(df)
-
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 🔍 Pool Selection")
 
@@ -133,18 +131,18 @@ if st.session_state.pool_filter_mode_class == 'top20':
     # Get top 20 pools
     top_pools = utils.get_top_pools(df, n=20)
     top_pools_list = [str(p) for p in top_pools]
-    df_display = df_sim[df_sim['pool_symbol'].isin(top_pools_list)].copy()
+    df_display = df[df['pool_symbol'].isin(top_pools_list)].copy()
     st.info(f"📊 Showing analysis for Top 20 Pools ({len(top_pools_list)} pools)")
 elif st.session_state.pool_filter_mode_class == 'worst20':
     # Get worst 20 pools
     worst_pools = utils.get_worst_pools(df, n=20)
     worst_pools_list = [str(p) for p in worst_pools]
-    df_display = df_sim[df_sim['pool_symbol'].isin(worst_pools_list)].copy()
+    df_display = df[df['pool_symbol'].isin(worst_pools_list)].copy()
     st.info(f"📊 Showing analysis for Worst 20 Pools ({len(worst_pools_list)} pools)")
 else:
     # 'all' mode - show everything
-    df_display = df_sim.copy()
-    total_pools = len(df_sim['pool_symbol'].unique()) if 'pool_symbol' in df_sim.columns else 0
+    df_display = df.copy()
+    total_pools = len(df['pool_symbol'].unique()) if 'pool_symbol' in df.columns else 0
     st.info(f"📊 Showing analysis for all pools ({total_pools} pools)")
 
 # Page Header with logout button
