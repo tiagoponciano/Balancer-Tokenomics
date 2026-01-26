@@ -43,6 +43,10 @@ venv.bak/
 *.pkl
 *.pickle
 
+# Exception: Allow required CSV files in data/ directory (for uploading to Supabase)
+# These files can be committed temporarily to upload to Supabase, then removed
+
+
 # Jupyter Notebook
 .ipynb_checkpoints
 *.ipynb

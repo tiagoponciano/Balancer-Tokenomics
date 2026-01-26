@@ -4,9 +4,85 @@ import numpy as np
 import plotly.graph_objects as go
 import os
 from dotenv import load_dotenv
+import io
 
 # Load environment variables
 load_dotenv()
+
+# Supabase configuration
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY")
+SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY")  # For private buckets
+SUPABASE_BUCKET = os.getenv("SUPABASE_BUCKET", "data")  # Default bucket name
+
+def get_supabase_client():
+    """Initialize and return Supabase client if credentials are available"""
+    if not SUPABASE_URL:
+        return None
+    
+    # Prefer service key for private buckets, fallback to anon key
+    supabase_key = SUPABASE_SERVICE_KEY or SUPABASE_ANON_KEY
+    if not supabase_key:
+        return None
+    
+    try:
+        from supabase import create_client, Client  # type: ignore
+        supabase: Client = create_client(SUPABASE_URL, supabase_key)
+        return supabase
+    except ImportError:
+        return None
+    except Exception:
+        return None
+
+def download_csv_from_supabase(filename):
+    """Download CSV file from Supabase Storage (supports both public and private buckets)"""
+    supabase = get_supabase_client()
+    if not supabase:
+        return None
+    
+    try:
+        # Download file from Supabase Storage
+        # For private buckets, service key is required
+        # For public buckets, anon key works
+        response = supabase.storage.from_(SUPABASE_BUCKET).download(filename)
+        if response:
+            # Convert bytes to DataFrame
+            df = pd.read_csv(io.BytesIO(response))
+            return df
+    except Exception as e:
+        # Silently fail - will fallback to local filesystem
+        pass
+    return None
+
+def load_aggregated_csv(filename):
+    """Load aggregated CSV file from Supabase Storage or local filesystem"""
+    # First, try to download from Supabase
+    df = download_csv_from_supabase(filename)
+    if df is not None and not df.empty:
+        return df
+    
+    # Fallback to local filesystem
+    cwd = os.getcwd()
+    
+    # Try different possible file paths (in order of likelihood)
+    file_paths = [
+        os.path.join(cwd, 'data', filename),  # data/file.csv (when running from root)
+        os.path.abspath(os.path.join(cwd, 'data', filename)),  # absolute path from root
+        os.path.abspath(os.path.join(cwd, '..', 'data', filename)),  # ../data/file.csv (when running from script/)
+        os.path.abspath(os.path.join(cwd, '..', '..', 'data', filename)),  # ../../data/file.csv
+        f'data/{filename}',  # relative
+        filename  # current dir
+    ]
+    
+    for path in file_paths:
+        try:
+            abs_path = os.path.abspath(path) if not os.path.isabs(path) else path
+            if os.path.exists(abs_path) and os.path.getsize(abs_path) > 0:
+                return pd.read_csv(abs_path)
+        except (FileNotFoundError, pd.errors.EmptyDataError, pd.errors.ParserError, Exception) as e:
+            continue
+    
+    return None
 
 # Prevent this file from being rendered as a Streamlit page
 # This is a utility module, not a page - it should only be imported
@@ -1142,7 +1218,39 @@ def show_logout_button():
 
 @st.cache_data
 def load_data():
+    """Load main financial data from Supabase Storage or local filesystem"""
     try:
+        # First, try to download from Supabase
+        df = download_csv_from_supabase('balancer_v2_financial_master_final.csv')
+        if df is not None and not df.empty:
+            # Process the data
+            if 'block_date' in df.columns:
+                df['block_date'] = pd.to_datetime(df['block_date'], errors='coerce')
+            
+            numeric_cols = [
+                'protocol_fee_amount_usd',
+                'total_protocol_fee_usd',
+                'direct_incentives',
+                'dao_profit_usd',
+                'bal_emited_votes',
+                'votes_received',
+                'emissions_roi',
+                'is_core_pool'
+            ]
+            
+            for col in numeric_cols:
+                if col in df.columns:
+                    df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+            
+            if 'is_core_pool' in df.columns:
+                df['is_core_pool'] = df['is_core_pool'].astype(int)
+            
+            if 'pool_category' not in df.columns:
+                df = classify_pools(df)
+            
+            return df
+        
+        # Fallback to local filesystem
         # Get current working directory (where streamlit is run from)
         cwd = os.getcwd()
         
@@ -1318,8 +1426,19 @@ def classify_pools(df):
 
 @st.cache_data
 def load_vebal_votes_data():
-    """Load veBAL votes data"""
+    """Load veBAL votes data from Supabase Storage or local filesystem"""
     try:
+        # First, try to download from Supabase
+        df_votes = download_csv_from_supabase('veBAL_votes.csv')
+        if df_votes is not None and not df_votes.empty:
+            # Convert numeric columns
+            numeric_cols = ['votes', 'pct_votes', 'ranking']
+            for col in numeric_cols:
+                if col in df_votes.columns:
+                    df_votes[col] = pd.to_numeric(df_votes[col], errors='coerce').fillna(0)
+            return df_votes
+        
+        # Fallback to local filesystem
         cwd = os.getcwd()
         file_paths = [
             os.path.abspath(os.path.join(cwd, '..', 'data', 'veBAL_votes.csv')),
@@ -1354,8 +1473,42 @@ def load_vebal_votes_data():
 
 @st.cache_data
 def load_bribes_data():
-    """Load bribes and gauges enriched data"""
+    """Load bribes and gauges enriched data from Supabase Storage or local filesystem"""
     try:
+        # First, try to download from Supabase (try different possible filenames)
+        filenames = [
+            'Balancer_Bribes_Gauges_enriched.csv',
+            'balancer_bribes_gauges_enriched.csv',
+            'Balancer_Bribes_Gauges.csv'
+        ]
+        
+        df_bribes = None
+        for filename in filenames:
+            df_bribes = download_csv_from_supabase(filename)
+            if df_bribes is not None and not df_bribes.empty:
+                break
+        
+        if df_bribes is not None and not df_bribes.empty:
+            # Process the data
+            date_cols = ['date', 'block_date', 'timestamp', 'week', 'period']
+            for col in date_cols:
+                if col in df_bribes.columns:
+                    df_bribes[col] = pd.to_datetime(df_bribes[col], errors='coerce')
+            
+            numeric_cols = [
+                'bribe_amount_usd', 'bribe_amount', 'total_bribes_usd',
+                'votes_received', 'bal_received', 'bal_emitted',
+                'bribe_efficiency', 'bribe_per_vote', 'votes_per_bribe',
+                'gauge_weight', 'gauge_share', 'bribe_count'
+            ]
+            
+            for col in numeric_cols:
+                if col in df_bribes.columns:
+                    df_bribes[col] = pd.to_numeric(df_bribes[col], errors='coerce').fillna(0)
+            
+            return df_bribes
+        
+        # Fallback to local filesystem
         # Get current working directory (where streamlit is run from)
         cwd = os.getcwd()
         

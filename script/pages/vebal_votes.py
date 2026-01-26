@@ -160,28 +160,8 @@ if st.session_state.pool_filter_mode_votes in ['top20', 'worst20']:
         st.rerun()
 
 # Helper function to load aggregated CSV (same as bribes_analysis.py)
-def load_aggregated_csv(filename):
-    """Load aggregated CSV file trying multiple possible paths"""
-    import os
-    cwd = os.getcwd()
-    
-    file_paths = [
-        os.path.join(cwd, 'data', filename),
-        os.path.abspath(os.path.join(cwd, 'data', filename)),
-        os.path.abspath(os.path.join(cwd, '..', 'data', filename)),
-        os.path.abspath(os.path.join(cwd, '..', '..', 'data', filename)),
-        f'data/{filename}',
-        filename
-    ]
-    
-    for path in file_paths:
-        try:
-            abs_path = os.path.abspath(path) if not os.path.isabs(path) else path
-            if os.path.exists(abs_path) and os.path.getsize(abs_path) > 0:
-                return pd.read_csv(abs_path)
-        except Exception:
-            continue
-    return None
+# Use load_aggregated_csv from utils (supports Supabase)
+load_aggregated_csv = utils.load_aggregated_csv
 
 # Normalize gauge address for matching
 def normalize_gauge_addr(addr):

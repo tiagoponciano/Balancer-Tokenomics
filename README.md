@@ -20,14 +20,37 @@ Create a comprehensive Streamlit application to analyze historical Balancer toke
 pip install -r requirements.txt
 ```
 
-2. **Set up environment variables (optional):**
-Create a `.env` file with authentication credentials:
+2. **Set up Supabase Storage (required for deployment):**
+   - Create a Supabase project at https://supabase.com
+   - Create a storage bucket named `data` (or update `SUPABASE_BUCKET` in `.env`)
+   - **Recommended: Create as private bucket** (more secure)
+   - Upload your CSV files to the bucket:
+     - `balancer_v2_financial_master_final.csv`
+     - `Balancer_Bribes_Gauges_enriched.csv`
+     - `veBAL_votes.csv`
+     - `top20_pools_bribes_aggregated.csv` (generated)
+     - `worst20_pools_bribes_aggregated.csv` (generated)
+     - `top20_pools_votes_aggregated.csv` (generated)
+     - `worst20_pools_votes_aggregated.csv` (generated)
+   - See `SUPABASE_SETUP.md` for detailed instructions on private vs public buckets
+
+3. **Set up environment variables:**
+Create a `.env` file with your credentials:
 ```
+# Authentication (required)
 LOGIN_USERNAME=your_username
 LOGIN_PASSWORD=your_password
+
+# Supabase Configuration (required for deployment)
+SUPABASE_URL=https://your-project.supabase.co
+# For public buckets:
+SUPABASE_ANON_KEY=your-anon-key
+# For private buckets (recommended):
+# SUPABASE_SERVICE_KEY=your-service-role-key
+SUPABASE_BUCKET=data
 ```
 
-3. **Generate aggregated data files (optional but recommended):**
+4. **Generate aggregated data files (optional but recommended):**
 ```bash
 # Generate Top 20 and Worst 20 pools aggregated data for bribes
 python3 "data generator/create_top_worst_bribes_csv.py"
@@ -36,7 +59,7 @@ python3 "data generator/create_top_worst_bribes_csv.py"
 python3 "data generator/create_top_worst_votes_csv.py"
 ```
 
-4. **Run the dashboard:**
+5. **Run the dashboard:**
 ```bash
 cd script
 streamlit run home.py
@@ -208,6 +231,7 @@ The project includes scripts to generate aggregated CSV files for efficient filt
 - plotly
 - numpy
 - python-dotenv (for environment variables)
+- supabase (for Supabase Storage integration)
 
 ## 🔮 Future Enhancements
 

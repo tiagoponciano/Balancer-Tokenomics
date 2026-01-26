@@ -277,30 +277,8 @@ for col in ['pool_title', 'pool_name', 'pool_symbol', 'pool', 'gauge', 'gauge_ad
 
 
 # Helper function to load aggregated CSV files (tries multiple paths)
-def load_aggregated_csv(filename):
-    """Load aggregated CSV file trying multiple possible paths"""
-    cwd = os.getcwd()
-    
-    # Try different possible file paths (in order of likelihood)
-    # Priority: data/ in current directory (when running from root)
-    file_paths = [
-        os.path.join(cwd, 'data', filename),  # data/file.csv (when running from root)
-        os.path.abspath(os.path.join(cwd, 'data', filename)),  # absolute path from root
-        os.path.abspath(os.path.join(cwd, '..', 'data', filename)),  # ../data/file.csv (when running from script/)
-        os.path.abspath(os.path.join(cwd, '..', '..', 'data', filename)),  # ../../data/file.csv
-        f'data/{filename}',  # relative
-        filename  # current dir
-    ]
-    
-    for path in file_paths:
-        try:
-            abs_path = os.path.abspath(path) if not os.path.isabs(path) else path
-            if os.path.exists(abs_path) and os.path.getsize(abs_path) > 0:
-                return pd.read_csv(abs_path)
-        except (FileNotFoundError, pd.errors.EmptyDataError, pd.errors.ParserError, Exception) as e:
-            continue
-    
-    return None
+# Use load_aggregated_csv from utils (supports Supabase)
+load_aggregated_csv = utils.load_aggregated_csv
 
 # Helper function to match pools between main data and bribes data
 def match_pools_in_bribes(bribes_df, main_pools, match_col):
