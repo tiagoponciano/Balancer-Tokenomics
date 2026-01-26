@@ -1047,9 +1047,15 @@ def inject_css():
 
 def check_authentication():
     """Check if user is authenticated, show login page if not"""
-    # Credentials from environment variables
-    CORRECT_USERNAME = os.getenv("LOGIN_USERNAME", "neo_balancer")
-    CORRECT_PASSWORD = os.getenv("LOGIN_PASSWORD", "bl004")
+    # Credentials from environment variables (required)
+    CORRECT_USERNAME = os.getenv("LOGIN_USERNAME")
+    CORRECT_PASSWORD = os.getenv("LOGIN_PASSWORD")
+    
+    # Validate that credentials are set
+    if not CORRECT_USERNAME or not CORRECT_PASSWORD:
+        st.error("Authentication credentials not configured. Please set LOGIN_USERNAME and LOGIN_PASSWORD in your .env file.")
+        st.stop()
+        return False
     
     # Initialize authentication state
     if 'authenticated' not in st.session_state:
