@@ -10,6 +10,10 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# Check authentication
+if not utils.check_authentication():
+    st.stop()
+
 utils.inject_css()
 
 df = utils.load_data()
@@ -18,8 +22,13 @@ if df.empty:
 
 df_sim = utils.run_simulation_sidebar(df)
 
-st.markdown('<div class="page-title">Balancer Tokenomics Analysis</div>', unsafe_allow_html=True)
-st.markdown('<div class="page-subtitle">Historical analysis with simulation controls</div>', unsafe_allow_html=True)
+# Header with logout button
+col_title, col_logout = st.columns([1, 0.1])
+with col_title:
+    st.markdown('<div class="page-title">Balancer Tokenomics Analysis</div>', unsafe_allow_html=True)
+    st.markdown('<div class="page-subtitle">Historical analysis with simulation controls</div>', unsafe_allow_html=True)
+with col_logout:
+    utils.show_logout_button()
 
 st.markdown("---")
 
@@ -34,36 +43,49 @@ if 'pool_filter_mode' not in st.session_state:
 col_btn1, col_btn2 = st.sidebar.columns(2)
 
 with col_btn1:
-    if st.button("TOP 20", key="btn_top20"):
+    if st.button("Top 20", key="btn_top20"):
         st.session_state.pool_filter_mode = 'top20'
         st.session_state.selected_pools = []
 
 with col_btn2:
-    if st.button("WORST 20", key="btn_worst20"):
+    if st.button("Worst 20", key="btn_worst20"):
         st.session_state.pool_filter_mode = 'worst20'
         st.session_state.selected_pools = []
 
 if st.session_state.pool_filter_mode == 'worst20':
     filter_pools = sorted([str(p) for p in utils.get_worst_pools(df, n=20)])
-    filter_label = "Select from WORST 20 Pools"
+    filter_label = "Select from Worst 20 Pools"
 else:
     filter_pools = sorted([str(p) for p in utils.get_top_pools(df, n=20)])
-    filter_label = "Select from TOP 20 Pools"
+    filter_label = "Select from Top 20 Pools"
 
+# Clear invalid selections when filter mode changes
 valid_sel = [p for p in st.session_state.selected_pools if p in filter_pools]
-default_selection = valid_sel if valid_sel else []
+if len(valid_sel) != len(st.session_state.selected_pools):
+    st.session_state.selected_pools = valid_sel
 
-if st.sidebar.button("Selecionar tudo", key="btn_select_all"):
-    st.session_state.selected_pools = filter_pools
+# Use session_state directly as default, but sync with filter_pools
+if st.session_state.selected_pools and all(p in filter_pools for p in st.session_state.selected_pools):
+    default_selection = st.session_state.selected_pools
+else:
+    default_selection = []
+
+if st.sidebar.button("Select All", key="btn_select_all"):
+    st.session_state.selected_pools = filter_pools.copy()
     st.rerun()
+
+# Use dynamic key based on filter mode to force update
+multiselect_key = f"multiselect_pools_home_{st.session_state.pool_filter_mode}"
 
 selected_pools = st.sidebar.multiselect(
     filter_label,
     options=filter_pools,
     default=default_selection,
-    help="Select specific pools to view individual analysis"
+    help="Select specific pools to view individual analysis",
+    key=multiselect_key
 )
 
+# Always update session state with current selection
 st.session_state.selected_pools = selected_pools
 
 filter_by_pools = len(selected_pools) > 0
@@ -215,7 +237,15 @@ if filter_by_pools:
     }).round(2)
     
     pool_summary.columns = ['DAO Revenue', 'Holders Revenue', 'Incentives Revenue', 'BAL Emitted', 'Total Revenue', 'Total Incentives', 'DAO Profit', 'Category']
-    st.dataframe(pool_summary, use_container_width=True, hide_index=False)
+    
+    # Format monetary columns for display
+    pool_summary_display = pool_summary.copy()
+    monetary_cols = ['DAO Revenue', 'Holders Revenue', 'Incentives Revenue', 'Total Revenue', 'Total Incentives', 'DAO Profit']
+    for col in monetary_cols:
+        if col in pool_summary_display.columns:
+            pool_summary_display[col] = pool_summary_display[col].apply(lambda x: f"${x:,.0f}" if pd.notna(x) else "$0")
+    
+    st.dataframe(pool_summary_display, use_container_width=True, hide_index=False)
     
     st.markdown("---")
     st.markdown("### 📊 Individual Pool Analysis")

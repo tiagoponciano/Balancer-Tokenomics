@@ -4,6 +4,11 @@ import plotly.graph_objects as go
 import pandas as pd
 
 st.set_page_config(page_title="Pool Classification", layout="wide", page_icon="🏷️")
+
+# Check authentication
+if not utils.check_authentication():
+    st.stop()
+
 utils.inject_css()
 
 df = utils.load_data()
@@ -24,37 +29,60 @@ if 'pool_filter_mode_class' not in st.session_state:
 col_btn1, col_btn2 = st.sidebar.columns(2)
 
 with col_btn1:
-    if st.button("TOP 20", key="btn_top20_class"):
+    if st.button("Top 20", key="btn_top20_class"):
+        old_mode = st.session_state.pool_filter_mode_class
         st.session_state.pool_filter_mode_class = 'top20'
-        st.session_state.selected_pools_class = []
+        # Clear selections when mode changes
+        if old_mode != 'top20':
+            st.session_state.selected_pools_class = []
+        st.rerun()
 
 with col_btn2:
-    if st.button("WORST 20", key="btn_worst20_class"):
+    if st.button("Worst 20", key="btn_worst20_class"):
+        old_mode = st.session_state.pool_filter_mode_class
         st.session_state.pool_filter_mode_class = 'worst20'
-        st.session_state.selected_pools_class = []
+        # Clear selections when mode changes
+        if old_mode != 'worst20':
+            st.session_state.selected_pools_class = []
+        st.rerun()
 
 if st.session_state.pool_filter_mode_class == 'worst20':
     filter_pools = sorted([str(p) for p in utils.get_worst_pools(df, n=20)])
-    filter_label = "Select from WORST 20 Pools"
+    filter_label = "Select from Worst 20 Pools"
 else:
     filter_pools = sorted([str(p) for p in utils.get_top_pools(df, n=20)])
-    filter_label = "Select from TOP 20 Pools"
+    filter_label = "Select from Top 20 Pools"
 
+# Clear invalid selections when filter mode changes
 valid_sel = [p for p in st.session_state.selected_pools_class if p in filter_pools]
-default_selection = valid_sel if valid_sel else []
+if len(valid_sel) != len(st.session_state.selected_pools_class):
+    st.session_state.selected_pools_class = valid_sel
 
-if st.sidebar.button("Selecionar tudo", key="btn_select_all_class"):
-    st.session_state.selected_pools_class = filter_pools
+# Initialize default selection from session state if valid
+default_selection = []
+if st.session_state.selected_pools_class:
+    # Only use session state if all selections are valid for current filter
+    if all(p in filter_pools for p in st.session_state.selected_pools_class):
+        default_selection = st.session_state.selected_pools_class
+
+if st.sidebar.button("Select All", key="btn_select_all_class"):
+    st.session_state.selected_pools_class = filter_pools.copy()
+    default_selection = filter_pools.copy()
     st.rerun()
+
+# Use dynamic key based on filter mode to force update when mode changes
+multiselect_key = f"multiselect_pools_class_{st.session_state.pool_filter_mode_class}"
 
 selected_pools = st.sidebar.multiselect(
     filter_label,
     options=filter_pools,
     default=default_selection,
-    help="Select specific pools to view individual analysis"
+    help="Select specific pools to view individual analysis",
+    key=multiselect_key
 )
 
-st.session_state.selected_pools_class = selected_pools
+# Always sync session state with current selection
+st.session_state.selected_pools_class = list(selected_pools) if selected_pools else []
 
 filter_by_pools = len(selected_pools) > 0
 
@@ -64,8 +92,13 @@ if filter_by_pools:
 else:
     df_display = df_sim.copy()
 
-st.markdown('<div class="page-title">Pool Classification Analysis</div>', unsafe_allow_html=True)
-st.markdown('<div class="page-subtitle">Legitimate vs Mercenary pools classification and historical BAL distribution</div>', unsafe_allow_html=True)
+# Page Header with logout button
+col_title, col_logout = st.columns([1, 0.1])
+with col_title:
+    st.markdown('<div class="page-title">Pool Classification Analysis</div>', unsafe_allow_html=True)
+    st.markdown('<div class="page-subtitle">Legitimate vs Mercenary pools classification and historical BAL distribution</div>', unsafe_allow_html=True)
+with col_logout:
+    utils.show_logout_button()
 
 st.markdown("---")
 
@@ -109,7 +142,18 @@ with col3:
 
 st.markdown("---")
 
-st.dataframe(category_stats, use_container_width=True, hide_index=False)
+# Format monetary columns for display
+category_stats_display = category_stats.copy()
+for col in ['Total Revenue', 'Total Incentives', 'Total DAO Profit']:
+    if col in category_stats_display.columns:
+        category_stats_display[col] = category_stats_display[col].apply(lambda x: f"${x:,.0f}" if pd.notna(x) else "$0")
+
+# Format percentage columns
+for col in ['% of Total Incentives', '% of Total BAL']:
+    if col in category_stats_display.columns:
+        category_stats_display[col] = category_stats_display[col].apply(lambda x: f"{x:.2f}%" if pd.notna(x) else "0.00%")
+
+st.dataframe(category_stats_display, use_container_width=True, hide_index=False)
 
 st.markdown("---")
 

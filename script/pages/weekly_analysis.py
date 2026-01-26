@@ -5,6 +5,11 @@ import pandas as pd
 import numpy as np
 
 st.set_page_config(page_title="Weekly Analysis", layout="wide", page_icon="📅")
+
+# Check authentication
+if not utils.check_authentication():
+    st.stop()
+
 utils.inject_css()
 
 df = utils.load_data()
@@ -25,36 +30,60 @@ if 'pool_filter_mode_weekly' not in st.session_state:
 col_btn1, col_btn2 = st.sidebar.columns(2)
 
 with col_btn1:
-    if st.button("TOP 20", key="btn_top20_weekly"):
+    if st.button("Top 20", key="btn_top20_weekly"):
+        old_mode = st.session_state.pool_filter_mode_weekly
         st.session_state.pool_filter_mode_weekly = 'top20'
-        st.session_state.selected_pools_weekly = []
+        # Clear selections when mode changes
+        if old_mode != 'top20':
+            st.session_state.selected_pools_weekly = []
+        st.rerun()
 
 with col_btn2:
-    if st.button("WORST 20", key="btn_worst20_weekly"):
+    if st.button("Worst 20", key="btn_worst20_weekly"):
+        old_mode = st.session_state.pool_filter_mode_weekly
         st.session_state.pool_filter_mode_weekly = 'worst20'
-        st.session_state.selected_pools_weekly = []
+        # Clear selections when mode changes
+        if old_mode != 'worst20':
+            st.session_state.selected_pools_weekly = []
+        st.rerun()
 
 if st.session_state.pool_filter_mode_weekly == 'worst20':
     filter_pools = sorted([str(p) for p in utils.get_worst_pools(df, n=20)])
-    filter_label = "Select from WORST 20 Pools"
+    filter_label = "Select from Worst 20 Pools"
 else:
     filter_pools = sorted([str(p) for p in utils.get_top_pools(df, n=20)])
-    filter_label = "Select from TOP 20 Pools"
+    filter_label = "Select from Top 20 Pools"
 
+# Clear invalid selections when filter mode changes
 valid_sel = [p for p in st.session_state.selected_pools_weekly if p in filter_pools]
-default_selection = valid_sel if valid_sel else []
+if len(valid_sel) != len(st.session_state.selected_pools_weekly):
+    st.session_state.selected_pools_weekly = valid_sel
 
-if st.sidebar.button("Selecionar tudo", key="btn_select_all_weekly"):
-    st.session_state.selected_pools_weekly = filter_pools
+# Initialize default selection from session state if valid
+default_selection = []
+if st.session_state.selected_pools_weekly:
+    # Only use session state if all selections are valid for current filter
+    if all(p in filter_pools for p in st.session_state.selected_pools_weekly):
+        default_selection = st.session_state.selected_pools_weekly
+
+if st.sidebar.button("Select All", key="btn_select_all_weekly"):
+    st.session_state.selected_pools_weekly = filter_pools.copy()
+    default_selection = filter_pools.copy()
     st.rerun()
+
+# Use dynamic key based on filter mode to force update when mode changes
+multiselect_key = f"multiselect_pools_weekly_{st.session_state.pool_filter_mode_weekly}"
 
 selected_pools = st.sidebar.multiselect(
     filter_label,
     options=filter_pools,
     default=default_selection,
-    help="Select specific pools to view individual analysis"
+    help="Select specific pools to view individual analysis",
+    key=multiselect_key
 )
-st.session_state.selected_pools_weekly = selected_pools
+
+# Always sync session state with current selection
+st.session_state.selected_pools_weekly = list(selected_pools) if selected_pools else []
 
 filter_by_pools = len(selected_pools) > 0
 
@@ -64,8 +93,13 @@ if filter_by_pools:
 else:
     df_display = df_sim.copy()
 
-st.markdown('<div class="page-title">Weekly Analysis</div>', unsafe_allow_html=True)
-st.markdown('<div class="page-subtitle">Weekly aggregation of emissions, votes, and distribution patterns</div>', unsafe_allow_html=True)
+# Page Header with logout button
+col_title, col_logout = st.columns([1, 0.1])
+with col_title:
+    st.markdown('<div class="page-title">Weekly Analysis</div>', unsafe_allow_html=True)
+    st.markdown('<div class="page-subtitle">Weekly aggregation of emissions, votes, and distribution patterns</div>', unsafe_allow_html=True)
+with col_logout:
+    utils.show_logout_button()
 
 st.markdown("---")
 
@@ -106,7 +140,12 @@ summary_stats = df_weekly.groupby('pool_category').agg({
 
 summary_stats.columns = ['Total BAL Emitted', 'Total USD Value', 'Weeks Active']
 
-st.dataframe(summary_stats, use_container_width=True, hide_index=False)
+# Format monetary column for display
+summary_stats_display = summary_stats.copy()
+if 'Total USD Value' in summary_stats_display.columns:
+    summary_stats_display['Total USD Value'] = summary_stats_display['Total USD Value'].apply(lambda x: f"${x:,.0f}" if pd.notna(x) else "$0")
+
+st.dataframe(summary_stats_display, use_container_width=True, hide_index=False)
 
 st.markdown("---")
 
@@ -248,6 +287,12 @@ display_columns = ['week', 'pool_category', 'bal_emited_votes', 'direct_incentiv
 df_display_table = df_weekly[display_columns].copy()
 df_display_table.columns = ['Week', 'Category', 'BAL Emitted', 'Incentives (USD)', '% of Weekly Emissions']
 df_display_table = df_display_table.sort_values(['Week', 'Category'])
+
+# Format monetary and percentage columns
+if 'Incentives (USD)' in df_display_table.columns:
+    df_display_table['Incentives (USD)'] = df_display_table['Incentives (USD)'].apply(lambda x: f"${x:,.0f}" if pd.notna(x) else "$0")
+if '% of Weekly Emissions' in df_display_table.columns:
+    df_display_table['% of Weekly Emissions'] = df_display_table['% of Weekly Emissions'].apply(lambda x: f"{x:.2f}%" if pd.notna(x) else "0.00%")
 
 st.dataframe(df_display_table, use_container_width=True, hide_index=True)
 

@@ -3,6 +3,10 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 import os
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # Prevent this file from being rendered as a Streamlit page
 # This is a utility module, not a page - it should only be imported
@@ -15,7 +19,7 @@ try:
         frame = inspect.currentframe()
         # If called directly (not imported), show message
         if frame and frame.f_back and 'streamlit' in str(frame.f_back.f_code.co_filename):
-            st.info("ℹ️ **utils.py** é um módulo de funções utilitárias, não uma página.\n\nUse as páginas do menu lateral: Home, Bribes Analysis, Pool Classification, etc.")
+            st.info("ℹ️ **utils.py** is a utility module, not a page.\n\nPlease use the pages from the sidebar menu: Home, Bribes Analysis, Pool Classification, etc.")
             st.stop()
 except:
     pass
@@ -25,6 +29,7 @@ def inject_css():
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
         
+        /* --- ESTRUTURA GERAL --- */
         .stApp {
             background: linear-gradient(135deg, #0F1419 0%, #1A1F26 100%);
             font-family: 'Inter', sans-serif;
@@ -52,6 +57,24 @@ def inject_css():
             background-clip: text;
             margin-bottom: 0.5rem;
             letter-spacing: -0.03em;
+            position: relative;
+            display: inline-block;
+        }
+        
+        .page-title::before {
+            content: '';
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            width: 800px;
+            height: 800px;
+            background: radial-gradient(circle, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0.02) 30%, transparent 60%);
+            border-radius: 50%;
+            filter: blur(80px);
+            mix-blend-mode: overlay;
+            pointer-events: none;
+            z-index: -1;
         }
         
         .page-subtitle {
@@ -90,12 +113,32 @@ def inject_css():
             font-weight: 500;
         }
         
+        .stSlider {
+            position: relative;
+        }
+        
+        .stSlider::before {
+            content: '';
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            width: 800px;
+            height: 800px;
+            background: radial-gradient(circle, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0.02) 30%, transparent 60%);
+            border-radius: 50%;
+            filter: blur(80px);
+            mix-blend-mode: overlay;
+            pointer-events: none;
+            z-index: -1;
+        }
+        
         .stSlider > div > div > div[role="slider"] {
             background-color: #67A2E1 !important;
         }
         
         .stSlider > div > div > div > div {
-            background-color: #B1ACF1 !important;
+            background-color: #FF4B4B !important;
         }
         
         hr {
@@ -120,14 +163,17 @@ def inject_css():
             font-size: 0.8125rem;
         }
         
-        .stButton > button {
-            width: 100%;
+        /* --- BOTÕES PADRÃO --- */
+        .stButton > button:not(.filter-button):not(.performance-button):not(.logout-button):not(#btn_performance_by_pool) {
+            width: 110px;
             background-color: rgba(103, 162, 225, 0.1);
             border: 1px solid rgba(103, 162, 225, 0.3);
             color: #67A2E1;
             font-weight: 500;
             border-radius: 8px;
             padding: 0.5rem 1rem;
+            position: relative;
+            overflow: visible;
         }
         
         .stButton > button:hover {
@@ -135,11 +181,428 @@ def inject_css():
             border-color: rgba(103, 162, 225, 0.5);
         }
         
+        /* --- BOTÕES DE FILTRO (TOP 20, WORST 20, SELECT ALL) --- */
+        /* Alterado para largura fixa de 110px */
+        .stButton > button.filter-button,
+        button.filter-button {
+            width: 110px !important;      /* Alterado */
+            min-width: 110px !important;  /* Alterado */
+            max-width: 110px !important;  /* Alterado */
+            height: 44px !important;
+            padding: 0.625rem 0.5rem !important; /* Padding reduzido para caber texto */
+            
+            font-size: 0.8125rem !important;
+            font-weight: 600 !important;
+            background: linear-gradient(135deg, rgba(103, 162, 225, 0.18) 0%, rgba(103, 162, 225, 0.08) 100%) !important;
+            border: 1.5px solid rgba(103, 162, 225, 0.45) !important;
+            color: #8BB5F0 !important;
+            border-radius: 12px !important;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+            box-shadow: 0 3px 12px rgba(103, 162, 225, 0.15) !important;
+            position: relative !important;
+            overflow: hidden !important;
+            letter-spacing: 0.03em !important;
+            text-transform: uppercase !important;
+        }
+        
+        .stButton > button.filter-button::before,
+        button.filter-button::before {
+            content: '' !important;
+            position: absolute !important;
+            top: 0 !important;
+            left: -100% !important;
+            width: 100% !important;
+            height: 100% !important;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.15), transparent) !important;
+            transition: left 0.6s ease !important;
+        }
+        
+        .stButton > button.filter-button::after,
+        button.filter-button::after {
+            content: '' !important;
+            position: absolute !important;
+            inset: 0 !important;
+            border-radius: 12px !important;
+            padding: 1.5px !important;
+            background: linear-gradient(135deg, rgba(103, 162, 225, 0.6), rgba(103, 162, 225, 0.2)) !important;
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0) !important;
+            -webkit-mask-composite: xor !important;
+            mask-composite: exclude !important;
+            opacity: 0 !important;
+            transition: opacity 0.3s !important;
+        }
+        
+        .stButton > button.filter-button:hover,
+        button.filter-button:hover {
+            background: linear-gradient(135deg, rgba(103, 162, 225, 0.28) 0%, rgba(103, 162, 225, 0.15) 100%) !important;
+            border-color: rgba(103, 162, 225, 0.7) !important;
+            transform: translateY(-3px) scale(1.02) !important;
+            box-shadow: 0 6px 20px rgba(103, 162, 225, 0.3) !important;
+            color: #A8C8F5 !important;
+        }
+        
+        .stButton > button.filter-button:hover::before,
+        button.filter-button:hover::before {
+            left: 100% !important;
+        }
+        
+        .stButton > button.filter-button:hover::after,
+        button.filter-button:hover::after {
+            opacity: 1 !important;
+        }
+        
+        .stButton > button.filter-button:active,
+        button.filter-button:active {
+            transform: translateY(-1px) scale(1.01) !important;
+            box-shadow: 0 3px 12px rgba(103, 162, 225, 0.2) !important;
+        }
+        
+        /* --- BOTÃO DE PERFORMANCE --- */
+        /* Alterado para largura fixa de 250px - Múltiplos seletores para máxima especificidade */
+        #btn_performance_by_pool,
+        button#btn_performance_by_pool,
+        button[data-testid="stBaseButton-secondary"]#btn_performance_by_pool,
+        button[data-testid="stBaseButton-primary"]#btn_performance_by_pool,
+        .stButton > button#btn_performance_by_pool,
+        button.performance-button#btn_performance_by_pool,
+        button[data-button-type="performance"]#btn_performance_by_pool {
+            width: 250px !important;      /* Alterado */
+            min-width: 250px !important;  /* Alterado */
+            max-width: 250px !important;  /* Alterado */
+            height: 44px !important;
+            
+            background: linear-gradient(135deg, rgba(177, 172, 241, 0.18) 0%, rgba(177, 172, 241, 0.08) 100%) !important;
+            border: 1.5px solid rgba(177, 172, 241, 0.45) !important;
+            color: #C4BFF5 !important;
+            font-weight: 600 !important;
+            padding: 0.625rem 1.5rem !important;
+            border-radius: 12px !important;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+            box-shadow: 0 3px 12px rgba(177, 172, 241, 0.15) !important;
+            position: relative !important;
+            overflow: hidden !important;
+            letter-spacing: 0.02em !important;
+        }
+        
+        /* Seletor adicional usando classe performance-button (caso o ID não seja aplicado) */
+        button.performance-button[data-testid="stBaseButton-secondary"],
+        button.performance-button[data-testid="stBaseButton-primary"] {
+            width: 250px !important;
+            min-width: 250px !important;
+            max-width: 250px !important;
+            height: 44px !important;
+            
+            background: linear-gradient(135deg, rgba(177, 172, 241, 0.18) 0%, rgba(177, 172, 241, 0.08) 100%) !important;
+            border: 1.5px solid rgba(177, 172, 241, 0.45) !important;
+            color: #C4BFF5 !important;
+            font-weight: 600 !important;
+            padding: 0.625rem 1.5rem !important;
+            border-radius: 12px !important;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+            box-shadow: 0 3px 12px rgba(177, 172, 241, 0.15) !important;
+            position: relative !important;
+            overflow: hidden !important;
+            letter-spacing: 0.02em !important;
+        }
+        
+        /* Pseudo-elements para o botão de performance */
+        #btn_performance_by_pool::before,
+        button#btn_performance_by_pool::before {
+            content: '' !important;
+            position: absolute !important;
+            top: 0 !important;
+            left: -100% !important;
+            width: 100% !important;
+            height: 100% !important;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.15), transparent) !important;
+            transition: left 0.6s ease !important;
+        }
+        
+        #btn_performance_by_pool::after,
+        button#btn_performance_by_pool::after {
+            content: '' !important;
+            position: absolute !important;
+            inset: 0 !important;
+            border-radius: 12px !important;
+            padding: 1.5px !important;
+            background: linear-gradient(135deg, rgba(177, 172, 241, 0.6), rgba(177, 172, 241, 0.2)) !important;
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0) !important;
+            -webkit-mask-composite: xor !important;
+            mask-composite: exclude !important;
+            opacity: 0 !important;
+            transition: opacity 0.3s !important;
+        }
+        
+        #btn_performance_by_pool:hover,
+        button#btn_performance_by_pool:hover {
+            background: linear-gradient(135deg, rgba(177, 172, 241, 0.28) 0%, rgba(177, 172, 241, 0.15) 100%) !important;
+            border-color: rgba(177, 172, 241, 0.7) !important;
+            transform: translateY(-3px) scale(1.02) !important;
+            box-shadow: 0 6px 20px rgba(177, 172, 241, 0.3) !important;
+            color: #D4CFF8 !important;
+        }
+        
+        #btn_performance_by_pool:hover::before,
+        button#btn_performance_by_pool:hover::before {
+            left: 100% !important;
+        }
+        
+        #btn_performance_by_pool:hover::after,
+        button#btn_performance_by_pool:hover::after {
+            opacity: 1 !important;
+        }
+        
+        #btn_performance_by_pool:active,
+        button#btn_performance_by_pool:active {
+            transform: translateY(-1px) scale(1.01) !important;
+            box-shadow: 0 3px 12px rgba(177, 172, 241, 0.2) !important;
+        }
+        
+        /* Fallback para performance-button (compatibilidade) */
+        .stButton > button.performance-button:not(#btn_performance_by_pool) {
+            min-width: 250px !important;
+            width: 250px !important;
+        }
+
+        /* --- LOGOUT BUTTON --- */
+        .logout-button {
+            /* Keep existing logout button styles */
+        }
+        
+        /* --- MULTISELECT STYLING (BASEWEB) --- */
+        div[data-baseweb="select"] {
+            position: relative;
+        }
+        
+        /* Main select container */
+        div[data-baseweb="select"] > div:first-child {
+            background-color: rgba(103, 162, 225, 0.1) !important;
+            border: 1px solid rgba(103, 162, 225, 0.3) !important;
+            border-radius: 8px !important;
+            padding: 0.5rem 1rem !important;
+            min-height: 40px !important;
+            max-height: 120px !important;
+            font-size: 1rem !important;
+            font-weight: 500 !important;
+            color: white !important;
+            transition: all 0.2s !important;
+            display: flex !important;
+            align-items: flex-start !important;
+            justify-content: flex-start !important;
+            gap: 0.5rem !important;
+            overflow-y: auto !important;
+            overflow-x: hidden !important;
+        }
+        
+        div[data-baseweb="select"] > div:first-child:hover {
+            background-color: rgba(103, 162, 225, 0.2) !important;
+            border-color: rgba(103, 162, 225, 0.5) !important;
+        }
+        
+        div[data-baseweb="select"] > div:first-child:focus,
+        div[data-baseweb="select"] > div:first-child:focus-within {
+            outline: none !important;
+            box-shadow: 0 0 0 3px rgba(103, 162, 225, 0.3) !important;
+        }
+        
+        /* Selected values display - scrollable container */
+        div[data-baseweb="select"] span[role="listbox"] {
+            display: flex !important;
+            flex-wrap: wrap !important;
+            gap: 0.25rem !important;
+            width: 100% !important;
+            align-items: flex-start !important;
+        }
+        
+        /* Custom scrollbar for multiselect */
+        div[data-baseweb="select"] > div:first-child::-webkit-scrollbar { width: 6px !important; }
+        div[data-baseweb="select"] > div:first-child::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.1) !important; border-radius: 3px !important;
+        }
+        div[data-baseweb="select"] > div:first-child::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.3) !important; border-radius: 3px !important;
+        }
+        div[data-baseweb="select"] > div:first-child::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.5) !important;
+        }
+        
+        /* Multiselect tags/chips */
+        div[data-baseweb="select"] span[role="listbox"] > span,
+        div[data-baseweb="select"] span[role="listbox"] > div {
+            background-color: #B1ACF1 !important;
+            color: white !important;
+            border-radius: 9999px !important;
+            padding: 0.25rem 0.75rem !important;
+            font-size: 0.875rem !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            gap: 0.5rem !important;
+            margin: 0.125rem !important;
+        }
+        
+        /* Placeholder text */
+        div[data-baseweb="select"] div[data-baseweb="select"] > div > div[data-baseweb="select"] {
+            color: rgba(255, 255, 255, 0.7) !important;
+        }
+        
+        /* Input text color */
+        div[data-baseweb="select"] input,
+        div[data-baseweb="select"] div[data-baseweb="select"] input {
+            color: white !important;
+        }
+        
+        /* Multiselect dropdown */
+        ul[role="listbox"],
+        div[data-baseweb="popover"] {
+            background-color: #1A1F26 !important;
+            border: 1px solid rgba(255, 255, 255, 0.1) !important;
+            border-radius: 8px !important;
+            padding: 0.5rem !important;
+        }
+        
+        ul[role="listbox"] li, div[data-baseweb="popover"] li {
+            color: white !important;
+            padding: 0.5rem 0.75rem !important;
+            border-radius: 4px !important;
+        }
+        
+        ul[role="listbox"] li:hover, div[data-baseweb="popover"] li:hover {
+            background-color: rgba(103, 162, 225, 0.1) !important;
+        }
+        
+        ul[role="listbox"] li[aria-selected="true"], div[data-baseweb="popover"] li[aria-selected="true"] {
+            background-color: rgba(103, 162, 225, 0.2) !important;
+        }
+        
         #MainMenu {visibility: hidden;}
         footer {visibility: hidden;}
         header {visibility: hidden;}
     </style>
+    <script>
+        // Note: Button class application is handled in individual pages
+    </script>
     """, unsafe_allow_html=True)
+
+def check_authentication():
+    """Check if user is authenticated, show login page if not"""
+    # Credentials from environment variables
+    CORRECT_USERNAME = os.getenv("LOGIN_USERNAME", "neo_balancer")
+    CORRECT_PASSWORD = os.getenv("LOGIN_PASSWORD", "bl004")
+    
+    # Initialize authentication state
+    if 'authenticated' not in st.session_state:
+        st.session_state.authenticated = False
+    
+    # If already authenticated, allow access
+    if st.session_state.authenticated:
+        return True
+    
+    # Show login page
+    st.markdown("""
+    <style>
+        .login-title {
+            font-size: 2rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #67A2E1 0%, #B1ACF1 50%, #E9A97B 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            text-align: center;
+            margin-bottom: 0.5rem;
+        }
+        .login-subtitle {
+            color: #8B95A6;
+            text-align: center;
+            margin-bottom: 2rem;
+            font-size: 0.9rem;
+        }
+        .stTextInput > div > div > input {
+            background-color: rgba(26, 31, 38, 0.6) !important;
+            border: 1px solid rgba(103, 162, 225, 0.3) !important;
+            color: white !important;
+            border-radius: 8px !important;
+        }
+        .stTextInput > div > div > input:focus {
+            border-color: #67A2E1 !important;
+            box-shadow: 0 0 0 3px rgba(103, 162, 225, 0.2) !important;
+        }
+        .stButton > button {
+            background: linear-gradient(135deg, #67A2E1 0%, #B1ACF1 100%) !important;
+            border: none !important;
+            color: white !important;
+            font-weight: 600 !important;
+            padding: 0.75rem 2rem !important;
+            border-radius: 8px !important;
+            transition: all 0.3s !important;
+        }
+        .stButton > button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(103, 162, 225, 0.4) !important;
+        }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    # Center the login form
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.markdown('<div class="login-title">🔐 Authentication Required</div>', unsafe_allow_html=True)
+        st.markdown('<div class="login-subtitle">Please enter your credentials to access the dashboard</div>', unsafe_allow_html=True)
+        
+        with st.form("login_form"):
+            username = st.text_input("Username", placeholder="Enter your username", key="login_username")
+            password = st.text_input("Password", type="password", placeholder="Enter your password", key="login_password")
+            
+            submitted = st.form_submit_button("Login", use_container_width=True)
+            
+            if submitted:
+                if username == CORRECT_USERNAME and password == CORRECT_PASSWORD:
+                    st.session_state.authenticated = True
+                    st.rerun()
+                else:
+                    st.error("❌ Invalid username or password. Please try again.")
+    
+    # Hide sidebar and menu when showing login
+    st.markdown("""
+    <style>
+        section[data-testid="stSidebar"] {
+            display: none;
+        }
+        #MainMenu {
+            visibility: hidden;
+        }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    return False
+
+def show_logout_button():
+    """Show logout button in top right corner"""
+    # Add CSS styling for logout button
+    st.markdown("""
+    <style>
+        button[key="logout_btn"] {
+            background-color: rgba(177, 172, 241, 0.2) !important;
+            border: 1px solid #B1ACF1 !important;
+            color: #B1ACF1 !important;
+            font-weight: 500 !important;
+            padding: 0.5rem 1rem !important;
+            border-radius: 8px !important;
+            font-size: 0.875rem !important;
+            min-width: 100px !important;
+            transition: all 0.2s !important;
+        }
+        button[key="logout_btn"]:hover {
+            background-color: rgba(177, 172, 241, 0.3) !important;
+            border-color: #B1ACF1 !important;
+            transform: translateY(-1px);
+        }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    # Create button (will be positioned in the column passed to this function)
+    if st.button("🚪 Logout", key="logout_btn"):
+        st.session_state.authenticated = False
+        st.rerun()
 
 @st.cache_data
 def load_data():
@@ -316,6 +779,42 @@ def classify_pools(df):
     df['pool_category'] = df['pool_category'].fillna('Undefined')
     
     return df
+
+@st.cache_data
+def load_vebal_votes_data():
+    """Load veBAL votes data"""
+    try:
+        cwd = os.getcwd()
+        file_paths = [
+            os.path.abspath(os.path.join(cwd, '..', 'data', 'veBAL_votes.csv')),
+            os.path.abspath(os.path.join(cwd, 'data', 'veBAL_votes.csv')),
+            'data/veBAL_votes.csv',
+            'veBAL_votes.csv'
+        ]
+        
+        df_votes = None
+        for path in file_paths:
+            try:
+                abs_path = os.path.abspath(path) if not os.path.isabs(path) else path
+                if os.path.exists(abs_path) and os.path.getsize(abs_path) > 0:
+                    df_votes = pd.read_csv(abs_path)
+                    if not df_votes.empty:
+                        break
+            except (FileNotFoundError, pd.errors.EmptyDataError, pd.errors.ParserError, Exception):
+                continue
+        
+        if df_votes is None or df_votes.empty:
+            return pd.DataFrame()
+        
+        # Convert numeric columns
+        numeric_cols = ['votes', 'pct_votes', 'ranking']
+        for col in numeric_cols:
+            if col in df_votes.columns:
+                df_votes[col] = pd.to_numeric(df_votes[col], errors='coerce').fillna(0)
+        
+        return df_votes
+    except Exception as e:
+        return pd.DataFrame()
 
 @st.cache_data
 def load_bribes_data():
