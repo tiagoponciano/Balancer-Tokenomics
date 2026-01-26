@@ -212,7 +212,7 @@ if st.session_state.pool_filter_mode_votes == 'top20':
         matched_count = len(df_filtered)
         if matched_count > 0:
             df_display = df_filtered
-            st.info(f"📊 Showing analysis for Top 20 Pools filter ({matched_count} matched gauges from {len(csv_data)} pools)")
+            st.info(f"📊 Showing analysis for Top 20 Pools filter ({matched_count} matched gauges from top 20 pools)")
         else:
             st.warning(f"⚠️ No gauges matched for Top 20 Pools. Showing all gauges instead.")
             df_display = df_votes.copy()
@@ -235,7 +235,7 @@ elif st.session_state.pool_filter_mode_votes == 'worst20':
         matched_count = len(df_filtered)
         if matched_count > 0:
             df_display = df_filtered
-            st.info(f"📊 Showing analysis for Worst 20 Pools filter ({matched_count} matched gauges from {len(csv_data)} pools)")
+            st.info(f"📊 Showing analysis for Worst 20 Pools filter ({matched_count} matched gauges from worst 20 pools)")
         else:
             st.warning(f"⚠️ No gauges matched for Worst 20 Pools. Showing all gauges instead.")
             df_display = df_votes.copy()
