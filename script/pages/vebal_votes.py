@@ -250,13 +250,11 @@ else:
     total_gauges = len(df_display)
     st.info(f"📊 Showing analysis for all gauges ({total_gauges} gauges)")
 
-# Page Header with logout button
-col_title, col_logout = st.columns([1, 0.1])
-with col_title:
-    st.markdown('<div class="page-title">🗳️ veBAL Votes Analysis</div>', unsafe_allow_html=True)
-    st.markdown('<div class="page-subtitle">Current voting distribution across Balancer gauges</div>', unsafe_allow_html=True)
-with col_logout:
-    utils.show_logout_button()
+# Page Header with logo, title, and logout
+utils.show_header(
+    page_title="🗳️ veBAL Votes Analysis",
+    page_subtitle="Current voting distribution across Balancer gauges"
+)
 
 st.markdown("---")
 
