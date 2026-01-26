@@ -11,6 +11,91 @@ if not utils.check_authentication():
 
 utils.inject_css()
 
+# Script para aplicar IDs específicos aos botões
+import streamlit.components.v1 as components
+
+components.html("""
+<script>
+console.log('[Button IDs] Script carregado via components.html (pool_classification.py)!');
+
+function applyButtonIds() {
+    const contexts = [
+        { doc: document, name: 'document' },
+        { doc: window.parent?.document, name: 'parent' },
+        { doc: window.top?.document, name: 'top' }
+    ];
+    
+    contexts.forEach(({ doc, name }) => {
+        if (!doc) return;
+        
+        try {
+            const buttons = doc.querySelectorAll('button[data-testid*="stBaseButton"], button');
+            
+            buttons.forEach((button) => {
+                let text = '';
+                try {
+                    text = (button.textContent || button.innerText || '').trim();
+                    if (!text || text.length === 0) {
+                        const markdownEl = button.querySelector('[data-testid="stMarkdownContainer"]');
+                        if (markdownEl) {
+                            text = (markdownEl.textContent || markdownEl.innerText || '').trim();
+                        }
+                    }
+                    if (!text || text.length === 0) {
+                        const pEl = button.querySelector('p');
+                        if (pEl) {
+                            text = (pEl.textContent || pEl.innerText || '').trim();
+                        }
+                    }
+                } catch(e) {}
+                
+                const textLower = text.toLowerCase();
+                
+                // Aplica IDs que começam com os prefixos corretos
+                if (text === 'Top 20' || textLower === 'top 20') {
+                    if (!button.id || !button.id.startsWith('btn_top20')) {
+                        button.id = 'btn_top20';
+                    }
+                } else if (text === 'Worst 20' || textLower === 'worst 20') {
+                    if (!button.id || !button.id.startsWith('btn_worst20')) {
+                        button.id = 'btn_worst20';
+                    }
+                } else if (text === 'Select All' || textLower === 'select all') {
+                    if (!button.id || !button.id.startsWith('btn_select_all')) {
+                        button.id = 'btn_select_all';
+                    }
+                } else if (text.includes('Logout') || text.includes('🚪') || textLower.includes('logout')) {
+                    if (!button.id || !button.id.startsWith('btn_logout')) {
+                        button.id = 'btn_logout';
+                    }
+                }
+            });
+        } catch(e) {
+            console.error(`[Button IDs] Erro no contexto ${name}:`, e);
+        }
+    });
+}
+
+// Executa imediatamente e após delays
+applyButtonIds();
+setTimeout(applyButtonIds, 100);
+setTimeout(applyButtonIds, 500);
+setTimeout(applyButtonIds, 1000);
+setInterval(applyButtonIds, 2000);
+
+// Observa mudanças no DOM
+if (window.MutationObserver) {
+    const observer = new MutationObserver(() => {
+        setTimeout(applyButtonIds, 100);
+    });
+    
+    if (document.body) {
+        observer.observe(document.body, { childList: true, subtree: true });
+    }
+}
+</script>
+""", height=0)
+
 df = utils.load_data()
 if df.empty:
     st.error("❌ Unable to load data.")
