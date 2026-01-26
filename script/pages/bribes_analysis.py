@@ -15,90 +15,172 @@ if not utils.check_authentication():
 
 utils.inject_css()
 
-# Script para aplicar estilos aos botões - versão melhorada
-st.markdown("""
-<script>
-(function() {
-    function applyStyles() {
-        // Tenta múltiplos contextos do DOM
-        const contexts = [
-            document,
-            window.parent?.document || document,
-            window.top?.document || document
-        ];
-        
-        contexts.forEach(doc => {
-            if (!doc) return;
-            
-            // Procura diretamente pelos botões
-            const buttons = doc.querySelectorAll('button[data-testid="stBaseButton-secondary"], button[data-testid="stBaseButton-primary"]');
-            
-            buttons.forEach(button => {
-                // Pega todo o texto dentro do botão (incluindo divs aninhados)
-                const buttonText = button.textContent || button.innerText || '';
-                
-                // Botão de Performance
-                if (buttonText.includes("Show Performance") || buttonText.includes("Performance by Pool")) {
-                    // Força estilos inline (mais garantido)
-                    button.style.setProperty('width', '250px', 'important');
-                    button.style.setProperty('min-width', '250px', 'important');
-                    button.style.setProperty('max-width', '250px', 'important');
-                    
-                    // Adiciona classe e ID
-                    button.classList.add('performance-button');
-                    button.setAttribute('id', 'btn_performance_by_pool');
-                    button.setAttribute('data-button-type', 'performance');
-                    button.classList.remove('filter-button', 'logout-button');
-                }
-                // Botões de Filtro
-                else if (buttonText.includes("Top 20") || buttonText.includes("Worst 20") || buttonText.includes("Select All")) {
-                    button.style.setProperty('width', '110px', 'important');
-                    button.style.setProperty('min-width', '110px', 'important');
-                    button.style.setProperty('max-width', '110px', 'important');
-                    button.classList.add('filter-button');
-                    button.setAttribute('data-button-type', 'filter');
-                    button.classList.remove('performance-button', 'logout-button');
-                }
-            });
-        });
-    }
+# Script para aplicar IDs específicos aos botões usando components.v1.html (mais confiável)
+import streamlit.components.v1 as components
 
-    // Executa imediatamente
-    applyStyles();
+components.html("""
+<script>
+console.log('[Button IDs] Script carregado via components.html!');
+
+function applyButtonIds() {
+    console.log('[Button IDs] Executando applyButtonIds...');
     
-    // Executa após pequenos delays para pegar elementos renderizados dinamicamente
-    setTimeout(applyStyles, 50);
-    setTimeout(applyStyles, 200);
-    setTimeout(applyStyles, 500);
+    // Tenta múltiplos contextos do DOM
+    const contexts = [
+        { doc: document, name: 'document' },
+        { doc: window.parent?.document, name: 'parent' },
+        { doc: window.top?.document, name: 'top' }
+    ];
     
-    // Executa repetidamente para combater re-renders do React
-    setInterval(applyStyles, 500);
+    let totalButtons = 0;
+    let perfButtonFound = false;
     
-    // Observa mudanças no DOM
-    if (window.MutationObserver) {
-        const observer = new MutationObserver(() => {
-            setTimeout(applyStyles, 50);
-        });
+    contexts.forEach(({ doc, name }) => {
+        if (!doc) {
+            console.log(`[Button IDs] Contexto ${name}: não disponível`);
+            return;
+        }
         
-        // Observa o body e document
-        [document.body, document.documentElement].forEach(el => {
-            if (el) observer.observe(el, { childList: true, subtree: true });
-        });
-        
-        // Tenta observar no contexto pai também
-        if (window.parent && window.parent.document) {
-            [window.parent.document.body, window.parent.document.documentElement].forEach(el => {
-                if (el) {
-                    try {
-                        observer.observe(el, { childList: true, subtree: true });
-                    } catch(e) {}
+        try {
+            // Procura por todos os botões do Streamlit
+            const buttons = doc.querySelectorAll('button[data-testid*="stBaseButton"], button');
+            console.log(`[Button IDs] Contexto ${name}: Encontrados ${buttons.length} botões`);
+            
+            buttons.forEach((button, index) => {
+                // Pega o texto completo do botão (incluindo emojis e espaços)
+                let text = '';
+                try {
+                    text = (button.textContent || button.innerText || '').trim();
+                    if (!text || text.length === 0) {
+                        const markdownEl = button.querySelector('[data-testid="stMarkdownContainer"]');
+                        if (markdownEl) {
+                            text = (markdownEl.textContent || markdownEl.innerText || '').trim();
+                        }
+                    }
+                    if (!text || text.length === 0) {
+                        const pEl = button.querySelector('p');
+                        if (pEl) {
+                            text = (pEl.textContent || pEl.innerText || '').trim();
+                        }
+                    }
+                } catch(e) {
+                    console.error(`[Button IDs] Erro ao pegar texto:`, e);
+                }
+                
+                const textLower = text.toLowerCase();
+                
+                // Log todos os botões para debug
+                if (text) {
+                    console.log(`[Button IDs] Botão ${index} (${name}): "${text}"`);
+                }
+                
+                // Aplica IDs específicos baseado no texto do botão
+                if (text === 'Top 20' || textLower === 'top 20') {
+                    button.id = 'btn_top20_bribes';
+                    console.log(`[Button IDs] ✅ ID aplicado: btn_top20_bribes`);
+                } else if (text === 'Worst 20' || textLower === 'worst 20') {
+                    button.id = 'btn_worst20_bribes';
+                    console.log(`[Button IDs] ✅ ID aplicado: btn_worst20_bribes`);
+                } else if (text === 'Select All' || textLower === 'select all') {
+                    button.id = 'btn_select_all_bribes';
+                    console.log(`[Button IDs] ✅ ID aplicado: btn_select_all_bribes`);
+                } else if (text.includes('Show Performance') || text.includes('Performance by Pool') || textLower.includes('performance') || text.includes('🔍')) {
+                    button.id = 'btn_performance_by_pool';
+                    button.classList.add('performance-button-fallback');
+                    button.setAttribute('data-button-type', 'performance');
+                    console.log(`[Button IDs] ✅ ID aplicado: btn_performance_by_pool`);
+                    console.log(`[Button IDs] Texto detectado: "${text}"`);
+                    
+                    // Aplica TODOS os estilos inline diretamente (máxima prioridade)
+                    const styles = {
+                        'width': '250px',
+                        'min-width': '250px',
+                        'max-width': '250px',
+                        'height': '56px',
+                        'padding': '0.625rem 1.5rem',
+                        'font-weight': '600',
+                        'background': 'linear-gradient(135deg, rgba(103, 162, 225, 0.18) 0%, rgba(103, 162, 225, 0.08) 100%)',
+                        'border': '1.5px solid rgba(103, 162, 225, 0.45)',
+                        'color': '#8BB5F0',
+                        'border-radius': '12px',
+                        'transition': 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                        'box-shadow': '0 3px 12px rgba(103, 162, 225, 0.15)',
+                        'position': 'relative',
+                        'overflow': 'hidden',
+                        'letter-spacing': '0.02em'
+                    };
+                    
+                    Object.keys(styles).forEach(prop => {
+                        button.style.setProperty(prop, styles[prop], 'important');
+                    });
+                    
+                    perfButtonFound = true;
+                    console.log(`[Button IDs] ✅ Todos os estilos inline aplicados!`);
                 }
             });
+            
+            totalButtons += buttons.length;
+        } catch(e) {
+            console.error(`[Button IDs] Erro no contexto ${name}:`, e);
         }
+    });
+    
+    if (!perfButtonFound) {
+        console.log('[Button IDs] ⚠️ Botão performance NÃO encontrado!');
     }
-})();
+    
+    console.log(`[Button IDs] Total de botões processados: ${totalButtons}`);
+}
+
+// Executa imediatamente
+console.log('[Button IDs] Executando imediatamente...');
+applyButtonIds();
+
+// Executa após delays
+setTimeout(() => {
+    console.log('[Button IDs] Execução após 100ms');
+    applyButtonIds();
+}, 100);
+setTimeout(() => {
+    console.log('[Button IDs] Execução após 500ms');
+    applyButtonIds();
+}, 500);
+setTimeout(() => {
+    console.log('[Button IDs] Execução após 1000ms');
+    applyButtonIds();
+}, 1000);
+setTimeout(() => {
+    console.log('[Button IDs] Execução após 2000ms');
+    applyButtonIds();
+}, 2000);
+
+// Executa repetidamente
+const intervalId = setInterval(() => {
+    console.log('[Button IDs] Intervalo de verificação (3s)');
+    applyButtonIds();
+}, 3000);
+
+// Observa mudanças no DOM
+if (window.MutationObserver) {
+    const observer = new MutationObserver(() => {
+        setTimeout(applyButtonIds, 100);
+    });
+    
+    if (document.body) {
+        observer.observe(document.body, { childList: true, subtree: true });
+    }
+    
+    // Tenta observar no contexto pai também
+    try {
+        if (window.parent && window.parent.document && window.parent.document.body) {
+            observer.observe(window.parent.document.body, { childList: true, subtree: true });
+        }
+    } catch(e) {
+        console.log('[Button IDs] Não foi possível observar contexto pai:', e);
+    }
+}
 </script>
-""", unsafe_allow_html=True)
+""", height=0)
 
 try:
     # Load data
@@ -220,97 +302,6 @@ if st.session_state.pool_filter_mode_bribes in ['top20', 'worst20']:
         st.session_state.selected_pools_bribes = []
         st.rerun()
 
-# Add JavaScript to apply CSS classes to buttons (enhanced detection)
-st.markdown("""
-<script>
-(function() {
-    function applyButtonClasses() {
-        // Find all buttons
-        const buttons = document.querySelectorAll('button');
-        
-        buttons.forEach(button => {
-            const buttonText = button.textContent.trim();
-            
-            // Remove any existing class markers to allow re-processing if needed
-            // This ensures classes are always up-to-date
-            
-            // Apply filter-button class to Top 20, Worst 20, and Select All
-            if (buttonText === 'Top 20' || buttonText === 'Worst 20' || buttonText === 'Select All') {
-                button.classList.add('filter-button');
-                button.classList.remove('performance-button', 'logout-button');
-                button.setAttribute('data-button-type', 'filter');
-            }
-            // Apply performance-button class and add id for direct CSS targeting
-            else if (buttonText.includes('Show Performance') || buttonText.includes('Performance by Pool') || buttonText.includes('🔍 Show Performance')) {
-                button.classList.add('performance-button');
-                button.classList.remove('filter-button', 'logout-button');
-                button.setAttribute('data-button-type', 'performance');
-                button.setAttribute('id', 'btn_performance_by_pool');
-                // Let CSS control the width - remove inline width styles
-                button.style.width = '';
-                button.style.minWidth = '';
-                button.style.maxWidth = '';
-            }
-            // Apply logout-button class
-            else if (buttonText.includes('Logout') || buttonText.includes('🚪')) {
-                button.classList.add('logout-button');
-                button.classList.remove('filter-button', 'performance-button');
-                button.setAttribute('data-button-type', 'logout');
-            }
-        });
-    }
-    
-    // Apply classes immediately
-    applyButtonClasses();
-    
-    // Reapply after delays to catch dynamically rendered buttons
-    setTimeout(applyButtonClasses, 100);
-    setTimeout(applyButtonClasses, 300);
-    setTimeout(applyButtonClasses, 600);
-    setTimeout(applyButtonClasses, 1000);
-    
-    // Use MutationObserver to catch buttons added dynamically
-    const observer = new MutationObserver(function(mutations) {
-        let shouldReapply = false;
-        mutations.forEach(function(mutation) {
-            if (mutation.addedNodes.length > 0) {
-                mutation.addedNodes.forEach(function(node) {
-                    if (node.nodeType === 1) {
-                        if (node.tagName === 'BUTTON' || node.querySelector('button')) {
-                            shouldReapply = true;
-                        }
-                    }
-                });
-            }
-        });
-        if (shouldReapply) {
-            setTimeout(applyButtonClasses, 50);
-        }
-    });
-    
-    observer.observe(document.body, {
-        childList: true,
-        subtree: true
-    });
-    
-    // Also listen for Streamlit events
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', applyButtonClasses);
-    } else {
-        applyButtonClasses();
-    }
-    
-    window.addEventListener('load', applyButtonClasses);
-    
-    // Listen for Streamlit rerun events
-    const originalRerun = window.parent.postMessage;
-    if (originalRerun) {
-        // Reapply after Streamlit updates
-        setInterval(applyButtonClasses, 2000);
-    }
-})();
-</script>
-""", unsafe_allow_html=True)
 
 # Determine filter pools based on mode
 if st.session_state.pool_filter_mode_bribes == 'top20':
