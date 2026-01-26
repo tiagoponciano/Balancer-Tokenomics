@@ -14,6 +14,91 @@ if not utils.check_authentication():
 
 utils.inject_css()
 
+# Script para aplicar IDs específicos aos botões
+import streamlit.components.v1 as components
+
+components.html("""
+<script>
+console.log('[Button IDs] Script carregado via components.html (vebal_votes.py)!');
+
+function applyButtonIds() {
+    const contexts = [
+        { doc: document, name: 'document' },
+        { doc: window.parent?.document, name: 'parent' },
+        { doc: window.top?.document, name: 'top' }
+    ];
+    
+    contexts.forEach(({ doc, name }) => {
+        if (!doc) return;
+        
+        try {
+            const buttons = doc.querySelectorAll('button[data-testid*="stBaseButton"], button');
+            
+            buttons.forEach((button) => {
+                let text = '';
+                try {
+                    text = (button.textContent || button.innerText || '').trim();
+                    if (!text || text.length === 0) {
+                        const markdownEl = button.querySelector('[data-testid="stMarkdownContainer"]');
+                        if (markdownEl) {
+                            text = (markdownEl.textContent || markdownEl.innerText || '').trim();
+                        }
+                    }
+                    if (!text || text.length === 0) {
+                        const pEl = button.querySelector('p');
+                        if (pEl) {
+                            text = (pEl.textContent || pEl.innerText || '').trim();
+                        }
+                    }
+                } catch(e) {}
+                
+                const textLower = text.toLowerCase();
+                
+                // Aplica IDs que começam com os prefixos corretos
+                if (text === 'Top 20' || textLower === 'top 20') {
+                    if (!button.id || !button.id.startsWith('btn_top20')) {
+                        button.id = 'btn_top20';
+                    }
+                } else if (text === 'Worst 20' || textLower === 'worst 20') {
+                    if (!button.id || !button.id.startsWith('btn_worst20')) {
+                        button.id = 'btn_worst20';
+                    }
+                } else if (text === 'Select All' || textLower === 'select all') {
+                    if (!button.id || !button.id.startsWith('btn_select_all')) {
+                        button.id = 'btn_select_all';
+                    }
+                } else if (text.includes('Logout') || text.includes('🚪') || textLower.includes('logout')) {
+                    if (!button.id || !button.id.startsWith('btn_logout')) {
+                        button.id = 'btn_logout';
+                    }
+                }
+            });
+        } catch(e) {
+            console.error(`[Button IDs] Erro no contexto ${name}:`, e);
+        }
+    });
+}
+
+// Executa imediatamente e após delays
+applyButtonIds();
+setTimeout(applyButtonIds, 100);
+setTimeout(applyButtonIds, 500);
+setTimeout(applyButtonIds, 1000);
+setInterval(applyButtonIds, 2000);
+
+// Observa mudanças no DOM
+if (window.MutationObserver) {
+    const observer = new MutationObserver(() => {
+        setTimeout(applyButtonIds, 100);
+    });
+    
+    if (document.body) {
+        observer.observe(document.body, { childList: true, subtree: true });
+    }
+}
+</script>
+""", height=0)
+
 # Load veBAL votes data
 df_votes = utils.load_vebal_votes_data()
 
@@ -45,6 +130,138 @@ def extract_gauge_address(gauge_str):
 df_votes['symbol_clean'] = df_votes['symbol'].apply(clean_symbol)
 df_votes['gauge_address'] = df_votes['gauge'].apply(extract_gauge_address)
 
+# Load main data for pool filtering
+df = utils.load_data()
+
+# Sidebar filters
+st.sidebar.markdown("---")
+st.sidebar.markdown("### 🔍 Pool Selection")
+
+# Initialize session state - default to 'all' (show everything)
+if 'pool_filter_mode_votes' not in st.session_state:
+    st.session_state.pool_filter_mode_votes = 'all'  # Default: show all pools
+
+col_btn1, col_btn2 = st.sidebar.columns(2)
+
+with col_btn1:
+    if st.button("Top 20", key="btn_top20_votes"):
+        st.session_state.pool_filter_mode_votes = 'top20'
+        st.rerun()
+
+with col_btn2:
+    if st.button("Worst 20", key="btn_worst20_votes"):
+        st.session_state.pool_filter_mode_votes = 'worst20'
+        st.rerun()
+
+# Show "Select All" button only when a filter is active (top20 or worst20)
+if st.session_state.pool_filter_mode_votes in ['top20', 'worst20']:
+    if st.sidebar.button("Select All", key="btn_select_all_votes"):
+        st.session_state.pool_filter_mode_votes = 'all'
+        st.rerun()
+
+# Helper function to load aggregated CSV (similar to bribes_analysis.py)
+def load_aggregated_votes_csv(filename):
+    """Load aggregated votes CSV with multiple path attempts"""
+    import os
+    cwd = os.getcwd()
+    file_paths = [
+        os.path.abspath(os.path.join(cwd, 'data', filename)),
+        os.path.abspath(os.path.join(cwd, '..', 'data', filename)),
+        os.path.join('data', filename),
+        filename
+    ]
+    
+    for path in file_paths:
+        try:
+            abs_path = os.path.abspath(path) if not os.path.isabs(path) else path
+            if os.path.exists(abs_path) and os.path.getsize(abs_path) > 0:
+                df = pd.read_csv(abs_path)
+                if not df.empty:
+                    return df
+        except Exception:
+            continue
+    return pd.DataFrame()
+
+# Normalize pool name function (same as in create script)
+def normalize_pool_name_for_match(name):
+    """Normalize pool name for matching - must match create_top_worst_votes_csv.py exactly"""
+    if pd.isna(name) or name == "":
+        return ""
+    name_str = str(name).strip()
+    # Remove prefixos de blockchain (eth:, arb:, base:, pol:, etc.) - same regex as create script
+    name_str = re.sub(r'^(eth|arb|base|pol|gno|ava|opt|zkevm):', '', name_str, flags=re.IGNORECASE)
+    name_str = name_str.strip()
+    # Normaliza para uppercase para matching (exatamente como no script de criação)
+    name_str = name_str.upper()
+    # Remove emoji (já removido no clean_symbol, mas garantindo)
+    name_str = name_str.replace('↗', '').strip()
+    return name_str
+
+# Filter votes data based on mode
+df_display = df_votes.copy()
+
+# Add normalized pool name to df_display for matching
+df_display['pool_name_normalized'] = df_display['symbol_clean'].apply(normalize_pool_name_for_match)
+
+if st.session_state.pool_filter_mode_votes == 'top20':
+    # Load aggregated top 20 CSV
+    csv_data = load_aggregated_votes_csv('top20_pools_votes_aggregated.csv')
+    if not csv_data.empty and 'pool_name_normalized' in csv_data.columns:
+        # Get list of normalized pool names from CSV (already uppercase in CSV)
+        top_pools_normalized = set(csv_data['pool_name_normalized'].astype(str).str.strip().str.upper())
+        # Filter votes for pools that match
+        df_filtered = df_display[df_display['pool_name_normalized'].isin(top_pools_normalized)].copy()
+        matched_count = len(df_filtered)
+        if matched_count > 0:
+            df_display = df_filtered
+            st.info(f"📊 Showing analysis for Top 20 Pools filter ({matched_count} matched gauges from {len(csv_data)} pools)")
+        else:
+            # Debug: show sample of what we're trying to match
+            sample_csv_names = list(top_pools_normalized)[:3]
+            sample_votes_names = df_display['pool_name_normalized'].unique()[:3]
+            st.warning(f"⚠️ No gauges matched for Top 20 Pools.")
+            st.warning(f"   CSV pools (sample): {sample_csv_names}")
+            st.warning(f"   Votes pools (sample): {sample_votes_names}")
+            st.warning(f"   Showing all gauges instead.")
+            df_display = df_votes.copy()
+            total_gauges = len(df_display)
+            st.info(f"📊 Showing analysis for all gauges ({total_gauges} gauges)")
+    else:
+        st.warning("⚠️ Top 20 aggregated CSV not found. Showing all gauges.")
+        total_gauges = len(df_display)
+        st.info(f"📊 Showing analysis for all gauges ({total_gauges} gauges)")
+elif st.session_state.pool_filter_mode_votes == 'worst20':
+    # Load aggregated worst 20 CSV
+    csv_data = load_aggregated_votes_csv('worst20_pools_votes_aggregated.csv')
+    if not csv_data.empty and 'pool_name_normalized' in csv_data.columns:
+        # Get list of normalized pool names from CSV (already uppercase in CSV)
+        worst_pools_normalized = set(csv_data['pool_name_normalized'].astype(str).str.strip().str.upper())
+        # Filter votes for pools that match
+        df_filtered = df_display[df_display['pool_name_normalized'].isin(worst_pools_normalized)].copy()
+        matched_count = len(df_filtered)
+        if matched_count > 0:
+            df_display = df_filtered
+            st.info(f"📊 Showing analysis for Worst 20 Pools filter ({matched_count} matched gauges from {len(csv_data)} pools)")
+        else:
+            # Debug: show sample of what we're trying to match
+            sample_csv_names = list(worst_pools_normalized)[:3]
+            sample_votes_names = df_display['pool_name_normalized'].unique()[:3]
+            st.warning(f"⚠️ No gauges matched for Worst 20 Pools.")
+            st.warning(f"   CSV pools (sample): {sample_csv_names}")
+            st.warning(f"   Votes pools (sample): {sample_votes_names}")
+            st.warning(f"   Showing all gauges instead.")
+            df_display = df_votes.copy()
+            total_gauges = len(df_display)
+            st.info(f"📊 Showing analysis for all gauges ({total_gauges} gauges)")
+    else:
+        st.warning("⚠️ Worst 20 aggregated CSV not found. Showing all gauges.")
+        total_gauges = len(df_display)
+        st.info(f"📊 Showing analysis for all gauges ({total_gauges} gauges)")
+else:
+    # 'all' mode - show everything
+    total_gauges = len(df_display)
+    st.info(f"📊 Showing analysis for all gauges ({total_gauges} gauges)")
+
 # Page Header with logout button
 col_title, col_logout = st.columns([1, 0.1])
 with col_title:
@@ -60,10 +277,10 @@ st.markdown("### 📊 Key Metrics")
 
 col1, col2, col3, col4 = st.columns(4)
 
-total_votes = df_votes['votes'].sum()
-total_gauges = len(df_votes)
-top_gauge_votes = df_votes['votes'].max()
-top_gauge_pct = df_votes['pct_votes'].max() * 100
+total_votes = df_display['votes'].sum()
+total_gauges = len(df_display)
+top_gauge_votes = df_display['votes'].max()
+top_gauge_pct = df_display['pct_votes'].max() * 100
 
 with col1:
     st.metric("Total Votes", f"{total_votes:,.0f}", help="Total votes across all gauges")
@@ -89,7 +306,7 @@ with tab1:
     
     # Slider to select number of top gauges
     n_gauges = st.slider("Number of top gauges to display", 10, 50, 20, 5)
-    top_n = df_votes.nlargest(n_gauges, 'votes')
+    top_n = df_display.nlargest(n_gauges, 'votes')
     
     col_chart1, col_chart2 = st.columns([2, 1])
     
@@ -136,7 +353,7 @@ with tab1:
     
     with col_chart2:
         st.markdown("**Top 5 Gauges**")
-        top_5 = df_votes.nlargest(5, 'votes')
+        top_5 = df_display.nlargest(5, 'votes')
         for idx, row in top_5.iterrows():
             with st.container():
                 st.markdown(f"""
@@ -166,7 +383,7 @@ with tab2:
         
         fig_hist = go.Figure()
         fig_hist.add_trace(go.Histogram(
-            x=df_votes['votes'],
+            x=df_display['votes'],
             nbinsx=50,
             marker=dict(
                 color='#67A2E1',
@@ -198,7 +415,7 @@ with tab2:
         # Box plot
         fig_box = go.Figure()
         fig_box.add_trace(go.Box(
-            y=df_votes['votes'],
+            y=df_display['votes'],
             name='Votes Distribution',
             marker_color='#B1ACF1',
             boxmean='sd'
@@ -222,20 +439,20 @@ with tab2:
     # Statistics
     col_stat1, col_stat2, col_stat3, col_stat4, col_stat5 = st.columns(5)
     with col_stat1:
-        st.metric("Mean Votes", f"{df_votes['votes'].mean():,.0f}")
+        st.metric("Mean Votes", f"{df_display['votes'].mean():,.0f}")
     with col_stat2:
-        st.metric("Median Votes", f"{df_votes['votes'].median():,.0f}")
+        st.metric("Median Votes", f"{df_display['votes'].median():,.0f}")
     with col_stat3:
-        st.metric("Std Deviation", f"{df_votes['votes'].std():,.0f}")
+        st.metric("Std Deviation", f"{df_display['votes'].std():,.0f}")
     with col_stat4:
-        st.metric("Min Votes", f"{df_votes['votes'].min():,.2f}")
+        st.metric("Min Votes", f"{df_display['votes'].min():,.2f}")
     with col_stat5:
-        st.metric("Max Votes", f"{df_votes['votes'].max():,.0f}")
+        st.metric("Max Votes", f"{df_display['votes'].max():,.0f}")
     
     # Percentiles
     st.markdown("#### Percentiles")
     percentiles = [10, 25, 50, 75, 90, 95, 99]
-    percentile_data = {f'P{p}': np.percentile(df_votes['votes'], p) for p in percentiles}
+    percentile_data = {f'P{p}': np.percentile(df_display['votes'], p) for p in percentiles}
     col_p1, col_p2, col_p3, col_p4, col_p5, col_p6, col_p7 = st.columns(7)
     cols_p = [col_p1, col_p2, col_p3, col_p4, col_p5, col_p6, col_p7]
     for col, (label, value) in zip(cols_p, percentile_data.items()):
@@ -251,15 +468,15 @@ with tab3:
     
     with col_pie1:
         # Pie chart for top N
-        top_n_pie = df_votes.nlargest(n_top_pie, 'votes')
-        others_votes = df_votes['votes'].sum() - top_n_pie['votes'].sum()
+        top_n_pie = df_display.nlargest(n_top_pie, 'votes')
+        others_votes = df_display['votes'].sum() - top_n_pie['votes'].sum()
         
         pie_data = top_n_pie.copy()
         if others_votes > 0:
             others_row = pd.DataFrame({
                 'symbol_clean': ['Others'],
                 'votes': [others_votes],
-                'pct_votes': [others_votes / df_votes['votes'].sum()]
+                'pct_votes': [others_votes / df_display['votes'].sum()]
             })
             pie_data = pd.concat([pie_data, others_row], ignore_index=True)
         
@@ -295,7 +512,7 @@ with tab3:
     
     with col_pie2:
         # Treemap
-        top_n_treemap = df_votes.nlargest(15, 'votes')
+        top_n_treemap = df_display.nlargest(15, 'votes')
         fig_treemap = px.treemap(
             top_n_treemap,
             path=['symbol_clean'],
@@ -318,7 +535,7 @@ with tab3:
     
     # Cumulative percentage
     st.markdown("#### Cumulative Vote Distribution")
-    df_sorted = df_votes.sort_values('votes', ascending=False).copy()
+    df_sorted = df_display.sort_values('votes', ascending=False).copy()
     df_sorted['cumulative_pct'] = (df_sorted['votes'].cumsum() / df_sorted['votes'].sum() * 100)
     df_sorted['rank'] = range(1, len(df_sorted) + 1)
     
@@ -381,7 +598,7 @@ with tab4:
         # Filter by minimum share
         min_share = st.number_input("Minimum share (%)", min_value=0.0, max_value=100.0, value=0.0, step=0.1, key="min_share")
     
-    display_df = df_votes.copy()
+    display_df = df_display.copy()
     
     # Apply filters
     if search_term:
@@ -417,7 +634,7 @@ with tab4:
         hide_index=True,
         height=600
     )
-    st.caption(f"Showing {len(display_table)} of {len(df_votes)} gauges")
+    st.caption(f"Showing {len(display_table)} of {len(df_display)} gauges")
     
     # Download button
     csv = display_df.to_csv(index=False)
@@ -433,20 +650,20 @@ st.markdown("---")
 # Insights
 st.markdown("### 💡 Insights & Analysis")
 
-col_insight1, col_insight2, col_insight3 = st.columns(3)
+col_insight1, col_insight2 = st.columns(2)
 
 with col_insight1:
     st.markdown("#### 📊 Concentration Analysis")
-    top_5_pct = (df_votes.nlargest(5, 'votes')['votes'].sum() / total_votes * 100)
-    top_10_pct = (df_votes.nlargest(10, 'votes')['votes'].sum() / total_votes * 100)
-    top_20_pct = (df_votes.nlargest(20, 'votes')['votes'].sum() / total_votes * 100)
+    top_5_pct = (df_display.nlargest(5, 'votes')['votes'].sum() / total_votes * 100)
+    top_10_pct = (df_display.nlargest(10, 'votes')['votes'].sum() / total_votes * 100)
+    top_20_pct = (df_display.nlargest(20, 'votes')['votes'].sum() / total_votes * 100)
     
     st.metric("Top 5 Gauges Share", f"{top_5_pct:.1f}%")
     st.metric("Top 10 Gauges Share", f"{top_10_pct:.1f}%")
     st.metric("Top 20 Gauges Share", f"{top_20_pct:.1f}%")
     
     # Gini coefficient approximation
-    df_sorted_votes = df_votes.sort_values('votes', ascending=True)
+    df_sorted_votes = df_display.sort_values('votes', ascending=True)
     n = len(df_sorted_votes)
     cumsum = df_sorted_votes['votes'].cumsum()
     gini = (2 * sum((i + 1) * v for i, v in enumerate(df_sorted_votes['votes']))) / (n * total_votes) - (n + 1) / n
@@ -461,31 +678,10 @@ with col_insight1:
         st.success("✅ Votes are relatively distributed")
 
 with col_insight2:
-    st.markdown("#### 📈 Vote Distribution")
-    median_votes = df_votes['votes'].median()
-    mean_votes = df_votes['votes'].mean()
-    std_votes = df_votes['votes'].std()
-    cv = (std_votes / mean_votes) * 100 if mean_votes > 0 else 0
-    
-    st.metric("Median Votes per Gauge", f"{median_votes:,.0f}")
-    st.metric("Mean Votes per Gauge", f"{mean_votes:,.0f}")
-    st.metric("Coefficient of Variation", f"{cv:.1f}%", help="Higher CV = more variability")
-    
-    if mean_votes > median_votes * 2:
-        st.info("📊 **Right-skewed distribution**: Few gauges have very high votes")
-    else:
-        st.success("📊 Relatively balanced distribution")
-    
-    # Zero votes count
-    zero_votes = len(df_votes[df_votes['votes'] == 0])
-    if zero_votes > 0:
-        st.warning(f"⚠️ {zero_votes} gauges have zero votes")
-
-with col_insight3:
     st.markdown("#### 🎯 Power Distribution")
     
     # Calculate how many gauges control X% of votes
-    df_sorted_power = df_votes.sort_values('votes', ascending=False)
+    df_sorted_power = df_display.sort_values('votes', ascending=False)
     cumsum_power = df_sorted_power['votes'].cumsum()
     
     for target_pct in [50, 80, 90]:
@@ -500,7 +696,7 @@ with col_insight3:
         )
     
     # Herfindahl-Hirschman Index (HHI)
-    hhi = sum((df_votes['pct_votes'] * 100) ** 2)
+    hhi = sum((df_display['pct_votes'] * 100) ** 2)
     st.metric("HHI Index", f"{hhi:.0f}", help="Higher HHI = more concentration (0-10000 scale)")
     
     if hhi > 2500:
@@ -510,471 +706,3 @@ with col_insight3:
     else:
         st.success("🟢 **Low concentration** (HHI < 1500)")
 
-# Votes vs Pool Performance Analysis
-st.markdown("---")
-st.markdown("### 🏆 Votes vs Pool Performance")
-
-try:
-    # Load main data and bribes data to identify top/worst pools and get gauge mappings
-    df_main = utils.load_data()
-    df_bribes = utils.load_bribes_data()
-    
-    if not df_main.empty:
-        # Get top and worst pools
-        top_pools = utils.get_top_pools(df_main, n=20)
-        worst_pools = utils.get_worst_pools(df_main, n=20)
-        
-        # Aggregate pool data by pool_symbol
-        pool_performance = df_main.groupby('pool_symbol').agg({
-            'dao_profit_usd': 'sum',
-            'protocol_fee_amount_usd': 'sum',
-            'direct_incentives': 'sum',
-            'votes_received': 'sum'
-        }).reset_index()
-        
-        # Try to match using bribes data which has gauge_address mapping
-        votes_with_performance = df_votes.copy()
-        votes_with_performance['matched_pool'] = None
-        votes_with_performance['dao_profit_usd'] = np.nan
-        votes_with_performance['protocol_fee_amount_usd'] = np.nan
-        votes_with_performance['direct_incentives'] = np.nan
-        
-        # Method 1: Match via gauge_address using bribes data
-        if not df_bribes.empty and 'gauge_address' in df_bribes.columns:
-            # Normalize gauge addresses
-            def clean_gauge_addr(addr):
-                if pd.isna(addr):
-                    return ""
-                addr_str = str(addr).lower().strip()
-                if addr_str.startswith('0x'):
-                    return addr_str
-                return addr_str
-            
-            df_bribes['gauge_address_clean'] = df_bribes['gauge_address'].apply(clean_gauge_addr)
-            votes_with_performance['gauge_address_normalized'] = votes_with_performance['gauge_address'].apply(clean_gauge_addr)
-            
-            # Get unique pool-gauge mappings from bribes (use pool_title or pool_name)
-            # Create a mapping: gauge -> pool_name, then pool_name -> pool_symbol
-            gauge_to_pool_name = {}
-            pool_name_to_symbol = {}
-            
-            for _, row in df_bribes.iterrows():
-                gauge = clean_gauge_addr(row.get('gauge_address', ''))
-                pool_title = str(row.get('pool_title', '')).strip()
-                pool_name = str(row.get('pool_name', '')).strip()
-                pool_identifier = pool_title if pool_title else pool_name
-                
-                if gauge and pool_identifier:
-                    if gauge not in gauge_to_pool_name:
-                        gauge_to_pool_name[gauge] = pool_identifier
-            
-            # Create mapping from pool names to pool_symbols (from pool_performance)
-            def normalize_name(name):
-                if pd.isna(name):
-                    return ""
-                # More aggressive normalization
-                name_str = str(name).lower().strip()
-                # Remove common prefixes/suffixes
-                name_str = name_str.replace('(a)', '').replace('(b)', '').replace('(eth)', '')
-                name_str = name_str.replace('eth:', '').replace('arb:', '').replace('base:', '').replace('pol:', '').replace('gno:', '')
-                return name_str.strip()
-            
-            pool_performance['pool_symbol_normalized'] = pool_performance['pool_symbol'].apply(normalize_name)
-            
-            # Create reverse mapping: normalized pool_symbol -> original pool_symbol
-            pool_symbol_map = {}
-            for _, row in pool_performance.iterrows():
-                pool_sym = row['pool_symbol']
-                pool_sym_norm = normalize_name(pool_sym)
-                if pool_sym_norm:
-                    pool_symbol_map[pool_sym_norm] = pool_sym
-            
-            # Map gauges to pool names first
-            votes_with_performance['matched_pool_name'] = votes_with_performance['gauge_address_normalized'].map(gauge_to_pool_name)
-            
-            # Normalize matched pool names
-            votes_with_performance['matched_pool_name_normalized'] = votes_with_performance['matched_pool_name'].apply(normalize_name)
-            
-            # Try to match pool_name with pool_symbol using normalized names
-            votes_with_performance['matched_pool'] = votes_with_performance['matched_pool_name_normalized'].map(pool_symbol_map)
-            
-            # If still no match, try using pool_name directly (might match exactly)
-            unmatched_name = votes_with_performance['matched_pool'].isna() & votes_with_performance['matched_pool_name'].notna()
-            if unmatched_name.sum() > 0:
-                # Try exact match first
-                exact_match = votes_with_performance.loc[unmatched_name].merge(
-                    pool_performance[['pool_symbol']],
-                    left_on='matched_pool_name',
-                    right_on='pool_symbol',
-                    how='left',
-                    suffixes=('', '_exact')
-                )
-                votes_with_performance.loc[unmatched_name, 'matched_pool'] = exact_match['pool_symbol'].values
-            
-            # Now merge with pool_performance to get performance metrics
-            perf_merge = votes_with_performance.merge(
-                pool_performance,
-                left_on='matched_pool',
-                right_on='pool_symbol',
-                how='left',
-                suffixes=('', '_perf')
-            )
-            
-            # Update performance columns
-            for col in ['dao_profit_usd', 'protocol_fee_amount_usd', 'direct_incentives']:
-                if col in perf_merge.columns:
-                    votes_with_performance[col] = perf_merge[col].fillna(votes_with_performance[col])
-        
-        # Method 2: Fallback to name matching if gauge match didn't work well
-        unmatched = votes_with_performance['matched_pool'].isna() | (votes_with_performance['matched_pool'] == '')
-        if unmatched.sum() > 0:
-            def normalize_name(name):
-                if pd.isna(name):
-                    return ""
-                return str(name).lower().strip()
-            
-            # Ensure pool_performance has normalized column
-            if 'pool_symbol_normalized' not in pool_performance.columns:
-                pool_performance['pool_symbol_normalized'] = pool_performance['pool_symbol'].apply(normalize_name)
-            
-            votes_with_performance.loc[unmatched, 'symbol_normalized'] = votes_with_performance.loc[unmatched, 'symbol_clean'].apply(normalize_name)
-            
-            # Try name matching for unmatched rows
-            name_match = votes_with_performance.loc[unmatched].merge(
-                pool_performance,
-                left_on='symbol_normalized',
-                right_on='pool_symbol_normalized',
-                how='left',
-                suffixes=('', '_pool')
-            )
-            
-            # Update matched_pool where it's missing
-            if len(name_match) > 0:
-                votes_with_performance.loc[unmatched, 'matched_pool'] = name_match['pool_symbol'].values
-                
-                # Update performance metrics for unmatched rows
-                for col in ['dao_profit_usd', 'protocol_fee_amount_usd', 'direct_incentives']:
-                    if col in name_match.columns:
-                        votes_with_performance.loc[unmatched, col] = name_match[col].values
-        
-        # Classify pools
-        votes_with_performance['pool_category'] = 'Other'
-        votes_with_performance.loc[
-            votes_with_performance['matched_pool'].isin(top_pools), 'pool_category'
-        ] = 'Top 20 Pools'
-        votes_with_performance.loc[
-            votes_with_performance['matched_pool'].isin(worst_pools), 'pool_category'
-        ] = 'Worst 20 Pools'
-        
-        # Filter to only matched pools
-        matched_pools = votes_with_performance[votes_with_performance['matched_pool'].notna()].copy()
-        
-        # Debug info
-        total_votes_matched = matched_pools['votes'].sum() if not matched_pools.empty else 0
-        total_votes_all = votes_with_performance['votes'].sum()
-        match_rate = (total_votes_matched / total_votes_all * 100) if total_votes_all > 0 else 0
-        
-        if not matched_pools.empty:
-            st.info(f"ℹ️ Matched {len(matched_pools)} gauges ({match_rate:.1f}% of total votes) with pool performance data")
-            col_perf1, col_perf2 = st.columns(2)
-            
-            with col_perf1:
-                st.markdown("#### 📊 Votes Distribution: Top vs Worst Pools")
-                
-                # Aggregate by category
-                category_votes = matched_pools.groupby('pool_category').agg({
-                    'votes': 'sum',
-                    'pct_votes': 'sum',
-                    'matched_pool': 'nunique'
-                }).reset_index()
-                category_votes.columns = ['Category', 'Total Votes', 'Total Share', 'Pool Count']
-                
-                # Bar chart comparing votes
-                fig_comparison = go.Figure()
-                
-                top_data = matched_pools[matched_pools['pool_category'] == 'Top 20 Pools']
-                worst_data = matched_pools[matched_pools['pool_category'] == 'Worst 20 Pools']
-                other_data = matched_pools[matched_pools['pool_category'] == 'Other']
-                
-                if not top_data.empty:
-                    fig_comparison.add_trace(go.Bar(
-                        name='Top 20 Pools',
-                        x=['Top 20 Pools'],
-                        y=[top_data['votes'].sum()],
-                        marker_color='#67A2E1',
-                        text=[f"{top_data['votes'].sum():,.0f}"],
-                        textposition='outside'
-                    ))
-                
-                if not worst_data.empty:
-                    fig_comparison.add_trace(go.Bar(
-                        name='Worst 20 Pools',
-                        x=['Worst 20 Pools'],
-                        y=[worst_data['votes'].sum()],
-                        marker_color='#E9A97B',
-                        text=[f"{worst_data['votes'].sum():,.0f}"],
-                        textposition='outside'
-                    ))
-                
-                if not other_data.empty:
-                    fig_comparison.add_trace(go.Bar(
-                        name='Other Pools',
-                        x=['Other Pools'],
-                        y=[other_data['votes'].sum()],
-                        marker_color='#8B95A6',
-                        text=[f"{other_data['votes'].sum():,.0f}"],
-                        textposition='outside'
-                    ))
-                
-                fig_comparison.update_layout(
-                    plot_bgcolor='rgba(0,0,0,0)',
-                    paper_bgcolor='rgba(0,0,0,0)',
-                    font_color='white',
-                    title=dict(text="Total Votes by Pool Category", font=dict(color='white', size=16)),
-                    xaxis=dict(gridcolor='rgba(255,255,255,0.1)', title=""),
-                    yaxis=dict(gridcolor='rgba(255,255,255,0.1)', title="Total Votes"),
-                    height=400,
-                    showlegend=True,
-                    legend=dict(bgcolor='rgba(0,0,0,0.5)')
-                )
-                st.plotly_chart(fig_comparison, use_container_width=True)
-                
-                # Metrics
-                col_met1, col_met2, col_met3 = st.columns(3)
-                with col_met1:
-                    top_votes_total = top_data['votes'].sum() if not top_data.empty else 0
-                    st.metric("Top 20 Pools Votes", f"{top_votes_total:,.0f}")
-                with col_met2:
-                    worst_votes_total = worst_data['votes'].sum() if not worst_data.empty else 0
-                    st.metric("Worst 20 Pools Votes", f"{worst_votes_total:,.0f}")
-                with col_met3:
-                    if top_votes_total > 0 and worst_votes_total > 0:
-                        ratio = top_votes_total / worst_votes_total
-                        st.metric("Top/Worst Ratio", f"{ratio:.2f}x")
-                    else:
-                        st.metric("Top/Worst Ratio", "N/A")
-            
-            with col_perf2:
-                st.markdown("#### 📈 Average Votes per Pool")
-                
-                # Calculate averages
-                avg_votes_data = []
-                if not top_data.empty:
-                    avg_votes_data.append({
-                        'Category': 'Top 20 Pools',
-                        'Avg Votes': top_data['votes'].mean(),
-                        'Pool Count': len(top_data)
-                    })
-                if not worst_data.empty:
-                    avg_votes_data.append({
-                        'Category': 'Worst 20 Pools',
-                        'Avg Votes': worst_data['votes'].mean(),
-                        'Pool Count': len(worst_data)
-                    })
-                if not other_data.empty:
-                    avg_votes_data.append({
-                        'Category': 'Other Pools',
-                        'Avg Votes': other_data['votes'].mean(),
-                        'Pool Count': len(other_data)
-                    })
-                
-                if avg_votes_data:
-                    df_avg = pd.DataFrame(avg_votes_data)
-                    
-                    fig_avg = px.bar(
-                        df_avg,
-                        x='Category',
-                        y='Avg Votes',
-                        title="Average Votes per Pool by Category",
-                        color='Category',
-                        color_discrete_map={
-                            'Top 20 Pools': '#67A2E1',
-                            'Worst 20 Pools': '#E9A97B',
-                            'Other Pools': '#8B95A6'
-                        },
-                        text='Avg Votes'
-                    )
-                    fig_avg.update_traces(
-                        texttemplate='%{text:,.0f}',
-                        textposition='outside'
-                    )
-                    fig_avg.update_layout(
-                        plot_bgcolor='rgba(0,0,0,0)',
-                        paper_bgcolor='rgba(0,0,0,0)',
-                        font_color='white',
-                        title=dict(font=dict(color='white', size=16)),
-                        xaxis=dict(gridcolor='rgba(255,255,255,0.1)', title=""),
-                        yaxis=dict(gridcolor='rgba(255,255,255,0.1)', title="Average Votes"),
-                        height=400,
-                        showlegend=False
-                    )
-                    st.plotly_chart(fig_avg, use_container_width=True)
-            
-            # Scatter plot: DAO Profit vs Votes
-            st.markdown("#### 💰 DAO Profit vs Votes Received")
-            
-            scatter_data = matched_pools[
-                (matched_pools['dao_profit_usd'].notna()) & 
-                (matched_pools['votes'] > 0)
-            ].copy()
-            
-            if not scatter_data.empty:
-                fig_scatter = px.scatter(
-                    scatter_data,
-                    x='dao_profit_usd',
-                    y='votes',
-                    color='pool_category',
-                    size='votes',
-                    hover_data=['symbol_clean', 'matched_pool', 'dao_profit_usd', 'votes'],
-                    title="DAO Profit vs veBAL Votes",
-                    labels={
-                        'dao_profit_usd': 'DAO Profit (USD)',
-                        'votes': 'veBAL Votes',
-                        'pool_category': 'Pool Category'
-                    },
-                    color_discrete_map={
-                        'Top 20 Pools': '#67A2E1',
-                        'Worst 20 Pools': '#E9A97B',
-                        'Other Pools': '#8B95A6'
-                    },
-                    size_max=20
-                )
-                fig_scatter.update_layout(
-                    plot_bgcolor='rgba(0,0,0,0)',
-                    paper_bgcolor='rgba(0,0,0,0)',
-                    font_color='white',
-                    title=dict(font=dict(color='white', size=16)),
-                    xaxis=dict(gridcolor='rgba(255,255,255,0.1)', title="DAO Profit (USD)"),
-                    yaxis=dict(gridcolor='rgba(255,255,255,0.1)', title="veBAL Votes", type='log'),
-                    legend=dict(bgcolor='rgba(0,0,0,0.5)'),
-                    height=500
-                )
-                st.plotly_chart(fig_scatter, use_container_width=True)
-                
-                # Correlation analysis
-                if len(scatter_data) > 1:
-                    correlation = scatter_data['dao_profit_usd'].corr(scatter_data['votes'])
-                    col_corr1, col_corr2, col_corr3 = st.columns(3)
-                    with col_corr1:
-                        st.metric("Correlation (Profit ↔ Votes)", f"{correlation:.3f}", 
-                                 help="Correlation between DAO profit and votes received")
-                    with col_corr2:
-                        top_avg_profit = top_data['dao_profit_usd'].mean() if not top_data.empty and 'dao_profit_usd' in top_data.columns else 0
-                        st.metric("Avg DAO Profit (Top 20)", f"${top_avg_profit:,.0f}")
-                    with col_corr3:
-                        worst_avg_profit = worst_data['dao_profit_usd'].mean() if not worst_data.empty and 'dao_profit_usd' in worst_data.columns else 0
-                        st.metric("Avg DAO Profit (Worst 20)", f"${worst_avg_profit:,.0f}")
-            
-            # Top pools with votes table
-            st.markdown("#### 📋 Top 20 Pools: Votes & Performance")
-            if not top_data.empty:
-                # Select available columns
-                display_cols = ['symbol_clean', 'votes', 'pct_votes']
-                if 'dao_profit_usd' in top_data.columns:
-                    display_cols.append('dao_profit_usd')
-                if 'protocol_fee_amount_usd' in top_data.columns:
-                    display_cols.append('protocol_fee_amount_usd')
-                if 'matched_pool' in top_data.columns:
-                    display_cols.append('matched_pool')
-                
-                top_display = top_data.nlargest(20, 'votes')[display_cols].copy()
-                
-                # Rename columns
-                col_mapping = {
-                    'symbol_clean': 'Gauge',
-                    'votes': 'Votes',
-                    'pct_votes': 'Share %',
-                    'dao_profit_usd': 'DAO Profit (USD)',
-                    'protocol_fee_amount_usd': 'Revenue (USD)',
-                    'matched_pool': 'Pool'
-                }
-                top_display.columns = [col_mapping.get(col, col) for col in top_display.columns]
-                
-                # Format numeric columns
-                if 'Votes' in top_display.columns:
-                    top_display['Votes'] = top_display['Votes'].apply(lambda x: f"{x:,.0f}")
-                if 'Share %' in top_display.columns:
-                    top_display['Share %'] = top_display['Share %'].apply(lambda x: f"{x*100:.2f}%")
-                if 'DAO Profit (USD)' in top_display.columns:
-                    top_display['DAO Profit (USD)'] = top_display['DAO Profit (USD)'].apply(
-                        lambda x: f"${x:,.0f}" if pd.notna(x) and x != 0 else "N/A"
-                    )
-                if 'Revenue (USD)' in top_display.columns:
-                    top_display['Revenue (USD)'] = top_display['Revenue (USD)'].apply(
-                        lambda x: f"${x:,.0f}" if pd.notna(x) and x != 0 else "N/A"
-                    )
-                
-                st.dataframe(top_display, use_container_width=True, hide_index=True)
-            
-            st.markdown("#### 📋 Worst 20 Pools: Votes & Performance")
-            if not worst_data.empty:
-                # Select available columns
-                display_cols = ['symbol_clean', 'votes', 'pct_votes']
-                if 'dao_profit_usd' in worst_data.columns:
-                    display_cols.append('dao_profit_usd')
-                if 'protocol_fee_amount_usd' in worst_data.columns:
-                    display_cols.append('protocol_fee_amount_usd')
-                if 'matched_pool' in worst_data.columns:
-                    display_cols.append('matched_pool')
-                
-                worst_display = worst_data.nlargest(20, 'votes')[display_cols].copy()
-                
-                # Rename columns
-                col_mapping = {
-                    'symbol_clean': 'Gauge',
-                    'votes': 'Votes',
-                    'pct_votes': 'Share %',
-                    'dao_profit_usd': 'DAO Profit (USD)',
-                    'protocol_fee_amount_usd': 'Revenue (USD)',
-                    'matched_pool': 'Pool'
-                }
-                worst_display.columns = [col_mapping.get(col, col) for col in worst_display.columns]
-                
-                # Format numeric columns
-                if 'Votes' in worst_display.columns:
-                    worst_display['Votes'] = worst_display['Votes'].apply(lambda x: f"{x:,.0f}")
-                if 'Share %' in worst_display.columns:
-                    worst_display['Share %'] = worst_display['Share %'].apply(lambda x: f"{x*100:.2f}%")
-                if 'DAO Profit (USD)' in worst_display.columns:
-                    worst_display['DAO Profit (USD)'] = worst_display['DAO Profit (USD)'].apply(
-                        lambda x: f"${x:,.0f}" if pd.notna(x) and x != 0 else "N/A"
-                    )
-                if 'Revenue (USD)' in worst_display.columns:
-                    worst_display['Revenue (USD)'] = worst_display['Revenue (USD)'].apply(
-                        lambda x: f"${x:,.0f}" if pd.notna(x) and x != 0 else "N/A"
-                    )
-                
-                st.dataframe(worst_display, use_container_width=True, hide_index=True)
-        else:
-            st.info("ℹ️ Could not match pools with gauges. Pool names in main data may not match gauge names in votes data.")
-    else:
-        st.info("ℹ️ Main data not available. Cannot compare votes with pool performance.")
-except Exception as e:
-    st.warning(f"⚠️ Could not load pool performance data: {str(e)}")
-    st.info("This analysis requires the main financial data file to be available.")
-
-# Additional analysis section
-st.markdown("---")
-st.markdown("### 📊 Additional Statistics")
-
-col_add1, col_add2, col_add3, col_add4 = st.columns(4)
-
-with col_add1:
-    # Gauges with significant share
-    significant = len(df_votes[df_votes['pct_votes'] >= 0.01])  # >= 1%
-    st.metric("Gauges with ≥1% share", f"{significant}")
-
-with col_add2:
-    # Average votes per gauge (excluding zeros)
-    active_gauges = df_votes[df_votes['votes'] > 0]
-    avg_active = active_gauges['votes'].mean() if len(active_gauges) > 0 else 0
-    st.metric("Avg Votes (Active Gauges)", f"{avg_active:,.0f}")
-
-with col_add3:
-    # Vote efficiency (top gauge vs median)
-    efficiency_ratio = top_gauge_votes / median_votes if median_votes > 0 else 0
-    st.metric("Top/Median Ratio", f"{efficiency_ratio:.1f}x")
-
-with col_add4:
-    # Total unique gauges
-    st.metric("Total Unique Gauges", f"{total_gauges}")
