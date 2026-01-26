@@ -159,15 +159,18 @@ if st.session_state.pool_filter_mode_votes in ['top20', 'worst20']:
         st.session_state.pool_filter_mode_votes = 'all'
         st.rerun()
 
-# Helper function to load aggregated CSV (similar to bribes_analysis.py)
-def load_aggregated_votes_csv(filename):
-    """Load aggregated votes CSV with multiple path attempts"""
+# Helper function to load aggregated CSV (same as bribes_analysis.py)
+def load_aggregated_csv(filename):
+    """Load aggregated CSV file trying multiple possible paths"""
     import os
     cwd = os.getcwd()
+    
     file_paths = [
+        os.path.join(cwd, 'data', filename),
         os.path.abspath(os.path.join(cwd, 'data', filename)),
         os.path.abspath(os.path.join(cwd, '..', 'data', filename)),
-        os.path.join('data', filename),
+        os.path.abspath(os.path.join(cwd, '..', '..', 'data', filename)),
+        f'data/{filename}',
         filename
     ]
     
@@ -175,54 +178,43 @@ def load_aggregated_votes_csv(filename):
         try:
             abs_path = os.path.abspath(path) if not os.path.isabs(path) else path
             if os.path.exists(abs_path) and os.path.getsize(abs_path) > 0:
-                df = pd.read_csv(abs_path)
-                if not df.empty:
-                    return df
+                return pd.read_csv(abs_path)
         except Exception:
             continue
-    return pd.DataFrame()
+    return None
 
-# Normalize pool name function (same as in create script)
-def normalize_pool_name_for_match(name):
-    """Normalize pool name for matching - must match create_top_worst_votes_csv.py exactly"""
-    if pd.isna(name) or name == "":
+# Normalize gauge address for matching
+def normalize_gauge_addr(addr):
+    """Normalize gauge address for matching"""
+    if pd.isna(addr):
         return ""
-    name_str = str(name).strip()
-    # Remove prefixos de blockchain (eth:, arb:, base:, pol:, etc.) - same regex as create script
-    name_str = re.sub(r'^(eth|arb|base|pol|gno|ava|opt|zkevm):', '', name_str, flags=re.IGNORECASE)
-    name_str = name_str.strip()
-    # Normaliza para uppercase para matching (exatamente como no script de criação)
-    name_str = name_str.upper()
-    # Remove emoji (já removido no clean_symbol, mas garantindo)
-    name_str = name_str.replace('↗', '').strip()
-    return name_str
+    addr_str = str(addr).lower().strip()
+    if addr_str.startswith('0x'):
+        return addr_str
+    return addr_str
 
-# Filter votes data based on mode
+# Filter votes data based on mode - using votes aggregated CSVs (based on dao_profit_usd)
 df_display = df_votes.copy()
 
-# Add normalized pool name to df_display for matching
-df_display['pool_name_normalized'] = df_display['symbol_clean'].apply(normalize_pool_name_for_match)
+# Normalize gauge addresses in df_display for matching
+df_display['gauge_address_normalized'] = df_display['gauge_address'].apply(normalize_gauge_addr)
 
 if st.session_state.pool_filter_mode_votes == 'top20':
-    # Load aggregated top 20 CSV
-    csv_data = load_aggregated_votes_csv('top20_pools_votes_aggregated.csv')
-    if not csv_data.empty and 'pool_name_normalized' in csv_data.columns:
-        # Get list of normalized pool names from CSV (already uppercase in CSV)
-        top_pools_normalized = set(csv_data['pool_name_normalized'].astype(str).str.strip().str.upper())
-        # Filter votes for pools that match
-        df_filtered = df_display[df_display['pool_name_normalized'].isin(top_pools_normalized)].copy()
+    # Load aggregated top 20 CSV from bribes (has gauge_address -> pool_symbol mapping)
+    csv_data = load_aggregated_csv('top20_pools_bribes_aggregated.csv')
+    if csv_data is not None and not csv_data.empty and 'gauge_address' in csv_data.columns:
+        # Get list of gauge addresses from CSV
+        csv_data['gauge_address_normalized'] = csv_data['gauge_address'].apply(normalize_gauge_addr)
+        top_gauges = set(csv_data['gauge_address_normalized'].dropna().unique())
+        
+        # Filter votes for gauges that match top pools
+        df_filtered = df_display[df_display['gauge_address_normalized'].isin(top_gauges)].copy()
         matched_count = len(df_filtered)
         if matched_count > 0:
             df_display = df_filtered
             st.info(f"📊 Showing analysis for Top 20 Pools filter ({matched_count} matched gauges from {len(csv_data)} pools)")
         else:
-            # Debug: show sample of what we're trying to match
-            sample_csv_names = list(top_pools_normalized)[:3]
-            sample_votes_names = df_display['pool_name_normalized'].unique()[:3]
-            st.warning(f"⚠️ No gauges matched for Top 20 Pools.")
-            st.warning(f"   CSV pools (sample): {sample_csv_names}")
-            st.warning(f"   Votes pools (sample): {sample_votes_names}")
-            st.warning(f"   Showing all gauges instead.")
+            st.warning(f"⚠️ No gauges matched for Top 20 Pools. Showing all gauges instead.")
             df_display = df_votes.copy()
             total_gauges = len(df_display)
             st.info(f"📊 Showing analysis for all gauges ({total_gauges} gauges)")
@@ -231,25 +223,21 @@ if st.session_state.pool_filter_mode_votes == 'top20':
         total_gauges = len(df_display)
         st.info(f"📊 Showing analysis for all gauges ({total_gauges} gauges)")
 elif st.session_state.pool_filter_mode_votes == 'worst20':
-    # Load aggregated worst 20 CSV
-    csv_data = load_aggregated_votes_csv('worst20_pools_votes_aggregated.csv')
-    if not csv_data.empty and 'pool_name_normalized' in csv_data.columns:
-        # Get list of normalized pool names from CSV (already uppercase in CSV)
-        worst_pools_normalized = set(csv_data['pool_name_normalized'].astype(str).str.strip().str.upper())
-        # Filter votes for pools that match
-        df_filtered = df_display[df_display['pool_name_normalized'].isin(worst_pools_normalized)].copy()
+    # Load aggregated worst 20 CSV from bribes (has gauge_address -> pool_symbol mapping)
+    csv_data = load_aggregated_csv('worst20_pools_bribes_aggregated.csv')
+    if csv_data is not None and not csv_data.empty and 'gauge_address' in csv_data.columns:
+        # Get list of gauge addresses from CSV
+        csv_data['gauge_address_normalized'] = csv_data['gauge_address'].apply(normalize_gauge_addr)
+        worst_gauges = set(csv_data['gauge_address_normalized'].dropna().unique())
+        
+        # Filter votes for gauges that match worst pools
+        df_filtered = df_display[df_display['gauge_address_normalized'].isin(worst_gauges)].copy()
         matched_count = len(df_filtered)
         if matched_count > 0:
             df_display = df_filtered
             st.info(f"📊 Showing analysis for Worst 20 Pools filter ({matched_count} matched gauges from {len(csv_data)} pools)")
         else:
-            # Debug: show sample of what we're trying to match
-            sample_csv_names = list(worst_pools_normalized)[:3]
-            sample_votes_names = df_display['pool_name_normalized'].unique()[:3]
-            st.warning(f"⚠️ No gauges matched for Worst 20 Pools.")
-            st.warning(f"   CSV pools (sample): {sample_csv_names}")
-            st.warning(f"   Votes pools (sample): {sample_votes_names}")
-            st.warning(f"   Showing all gauges instead.")
+            st.warning(f"⚠️ No gauges matched for Worst 20 Pools. Showing all gauges instead.")
             df_display = df_votes.copy()
             total_gauges = len(df_display)
             st.info(f"📊 Showing analysis for all gauges ({total_gauges} gauges)")
