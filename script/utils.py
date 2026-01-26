@@ -163,8 +163,9 @@ def inject_css():
             font-size: 0.8125rem;
         }
         
-        /* --- BOTÕES PADRÃO --- */
-        .stButton > button:not(.filter-button):not(.performance-button):not(.logout-button):not(#btn_performance_by_pool) {
+        /* --- BOTÕES PADRÃO (fallback para outros botões) --- */
+        /* Exclui explicitamente os botões com IDs específicos */
+        .stButton > button:not(#btn_top20_bribes):not(#btn_worst20_bribes):not(#btn_select_all_bribes):not(#btn_performance_by_pool):not(.logout-button) {
             width: 110px;
             background-color: rgba(103, 162, 225, 0.1);
             border: 1px solid rgba(103, 162, 225, 0.3);
@@ -176,21 +177,19 @@ def inject_css():
             overflow: visible;
         }
         
-        .stButton > button:hover {
+        .stButton > button:not(#btn_top20_bribes):not(#btn_worst20_bribes):not(#btn_select_all_bribes):not(#btn_performance_by_pool):not(.logout-button):hover {
             background-color: rgba(103, 162, 225, 0.2);
             border-color: rgba(103, 162, 225, 0.5);
         }
         
-        /* --- BOTÕES DE FILTRO (TOP 20, WORST 20, SELECT ALL) --- */
-        /* Alterado para largura fixa de 110px */
-        .stButton > button.filter-button,
-        button.filter-button {
-            width: 110px !important;      /* Alterado */
-            min-width: 110px !important;  /* Alterado */
-            max-width: 110px !important;  /* Alterado */
+        /* --- BOTÃO TOP 20 --- */
+        #btn_top20_bribes,
+        button#btn_top20_bribes {
+            width: 110px !important;
+            min-width: 110px !important;
+            max-width: 110px !important;
             height: 44px !important;
-            padding: 0.625rem 0.5rem !important; /* Padding reduzido para caber texto */
-            
+            padding: 0.625rem 0.5rem !important;
             font-size: 0.8125rem !important;
             font-weight: 600 !important;
             background: linear-gradient(135deg, rgba(103, 162, 225, 0.18) 0%, rgba(103, 162, 225, 0.08) 100%) !important;
@@ -202,11 +201,10 @@ def inject_css():
             position: relative !important;
             overflow: hidden !important;
             letter-spacing: 0.03em !important;
-            text-transform: uppercase !important;
         }
         
-        .stButton > button.filter-button::before,
-        button.filter-button::before {
+        #btn_top20_bribes::before,
+        button#btn_top20_bribes::before {
             content: '' !important;
             position: absolute !important;
             top: 0 !important;
@@ -217,8 +215,8 @@ def inject_css():
             transition: left 0.6s ease !important;
         }
         
-        .stButton > button.filter-button::after,
-        button.filter-button::after {
+        #btn_top20_bribes::after,
+        button#btn_top20_bribes::after {
             content: '' !important;
             position: absolute !important;
             inset: 0 !important;
@@ -232,8 +230,8 @@ def inject_css():
             transition: opacity 0.3s !important;
         }
         
-        .stButton > button.filter-button:hover,
-        button.filter-button:hover {
+        #btn_top20_bribes:hover,
+        button#btn_top20_bribes:hover {
             background: linear-gradient(135deg, rgba(103, 162, 225, 0.28) 0%, rgba(103, 162, 225, 0.15) 100%) !important;
             border-color: rgba(103, 162, 225, 0.7) !important;
             transform: translateY(-3px) scale(1.02) !important;
@@ -241,71 +239,338 @@ def inject_css():
             color: #A8C8F5 !important;
         }
         
-        .stButton > button.filter-button:hover::before,
-        button.filter-button:hover::before {
+        #btn_top20_bribes:hover::before,
+        button#btn_top20_bribes:hover::before {
             left: 100% !important;
         }
         
-        .stButton > button.filter-button:hover::after,
-        button.filter-button:hover::after {
+        #btn_top20_bribes:hover::after,
+        button#btn_top20_bribes:hover::after {
             opacity: 1 !important;
         }
         
-        .stButton > button.filter-button:active,
-        button.filter-button:active {
+        #btn_top20_bribes:active,
+        button#btn_top20_bribes:active {
             transform: translateY(-1px) scale(1.01) !important;
             box-shadow: 0 3px 12px rgba(103, 162, 225, 0.2) !important;
         }
         
-        /* --- BOTÃO DE PERFORMANCE --- */
-        /* Alterado para largura fixa de 250px - Múltiplos seletores para máxima especificidade */
-        #btn_performance_by_pool,
-        button#btn_performance_by_pool,
+        /* --- BOTÃO WORST 20 --- */
+        #btn_worst20_bribes,
+        button#btn_worst20_bribes {
+            width: 110px !important;
+            min-width: 110px !important;
+            max-width: 110px !important;
+            height: 44px !important;
+            padding: 0.625rem 0.5rem !important;
+            font-size: 0.8125rem !important;
+            font-weight: 600 !important;
+            background: linear-gradient(135deg, rgba(103, 162, 225, 0.18) 0%, rgba(103, 162, 225, 0.08) 100%) !important;
+            border: 1.5px solid rgba(103, 162, 225, 0.45) !important;
+            color: #8BB5F0 !important;
+            border-radius: 12px !important;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+            box-shadow: 0 3px 12px rgba(103, 162, 225, 0.15) !important;
+            position: relative !important;
+            overflow: hidden !important;
+            letter-spacing: 0.03em !important;
+        }
+        
+        #btn_worst20_bribes::before,
+        button#btn_worst20_bribes::before {
+            content: '' !important;
+            position: absolute !important;
+            top: 0 !important;
+            left: -100% !important;
+            width: 100% !important;
+            height: 100% !important;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.15), transparent) !important;
+            transition: left 0.6s ease !important;
+        }
+        
+        #btn_worst20_bribes::after,
+        button#btn_worst20_bribes::after {
+            content: '' !important;
+            position: absolute !important;
+            inset: 0 !important;
+            border-radius: 12px !important;
+            padding: 1.5px !important;
+            background: linear-gradient(135deg, rgba(103, 162, 225, 0.6), rgba(103, 162, 225, 0.2)) !important;
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0) !important;
+            -webkit-mask-composite: xor !important;
+            mask-composite: exclude !important;
+            opacity: 0 !important;
+            transition: opacity 0.3s !important;
+        }
+        
+        #btn_worst20_bribes:hover,
+        button#btn_worst20_bribes:hover {
+            background: linear-gradient(135deg, rgba(103, 162, 225, 0.28) 0%, rgba(103, 162, 225, 0.15) 100%) !important;
+            border-color: rgba(103, 162, 225, 0.7) !important;
+            transform: translateY(-3px) scale(1.02) !important;
+            box-shadow: 0 6px 20px rgba(103, 162, 225, 0.3) !important;
+            color: #A8C8F5 !important;
+        }
+        
+        #btn_worst20_bribes:hover::before,
+        button#btn_worst20_bribes:hover::before {
+            left: 100% !important;
+        }
+        
+        #btn_worst20_bribes:hover::after,
+        button#btn_worst20_bribes:hover::after {
+            opacity: 1 !important;
+        }
+        
+        #btn_worst20_bribes:active,
+        button#btn_worst20_bribes:active {
+            transform: translateY(-1px) scale(1.01) !important;
+            box-shadow: 0 3px 12px rgba(103, 162, 225, 0.2) !important;
+        }
+        
+        /* --- BOTÃO SELECT ALL --- */
+        #btn_select_all_bribes,
+        button#btn_select_all_bribes {
+            width: 110px !important;
+            min-width: 110px !important;
+            max-width: 110px !important;
+            height: 44px !important;
+            padding: 0.625rem 0.5rem !important;
+            font-size: 0.8125rem !important;
+            font-weight: 600 !important;
+            background: linear-gradient(135deg, rgba(103, 162, 225, 0.18) 0%, rgba(103, 162, 225, 0.08) 100%) !important;
+            border: 1.5px solid rgba(103, 162, 225, 0.45) !important;
+            color: #8BB5F0 !important;
+            border-radius: 12px !important;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+            box-shadow: 0 3px 12px rgba(103, 162, 225, 0.15) !important;
+            position: relative !important;
+            overflow: hidden !important;
+            letter-spacing: 0.03em !important;
+        }
+        
+        #btn_select_all_bribes::before,
+        button#btn_select_all_bribes::before {
+            content: '' !important;
+            position: absolute !important;
+            top: 0 !important;
+            left: -100% !important;
+            width: 100% !important;
+            height: 100% !important;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.15), transparent) !important;
+            transition: left 0.6s ease !important;
+        }
+        
+        #btn_select_all_bribes::after,
+        button#btn_select_all_bribes::after {
+            content: '' !important;
+            position: absolute !important;
+            inset: 0 !important;
+            border-radius: 12px !important;
+            padding: 1.5px !important;
+            background: linear-gradient(135deg, rgba(103, 162, 225, 0.6), rgba(103, 162, 225, 0.2)) !important;
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0) !important;
+            -webkit-mask-composite: xor !important;
+            mask-composite: exclude !important;
+            opacity: 0 !important;
+            transition: opacity 0.3s !important;
+        }
+        
+        #btn_select_all_bribes:hover,
+        button#btn_select_all_bribes:hover {
+            background: linear-gradient(135deg, rgba(103, 162, 225, 0.28) 0%, rgba(103, 162, 225, 0.15) 100%) !important;
+            border-color: rgba(103, 162, 225, 0.7) !important;
+            transform: translateY(-3px) scale(1.02) !important;
+            box-shadow: 0 6px 20px rgba(103, 162, 225, 0.3) !important;
+            color: #A8C8F5 !important;
+        }
+        
+        #btn_select_all_bribes:hover::before,
+        button#btn_select_all_bribes:hover::before {
+            left: 100% !important;
+        }
+        
+        #btn_select_all_bribes:hover::after,
+        button#btn_select_all_bribes:hover::after {
+            opacity: 1 !important;
+        }
+        
+        #btn_select_all_bribes:active,
+        button#btn_select_all_bribes:active {
+            transform: translateY(-1px) scale(1.01) !important;
+            box-shadow: 0 3px 12px rgba(103, 162, 225, 0.2) !important;
+        }
+        
+        /* --- BOTÃO SHOW PERFORMANCE BY POOL --- */
+        /* Seletor usando atributo data customizado (mais confiável) */
+        button[data-button-type="performance"],
+        button[data-testid="stBaseButton-secondary"][data-button-type="performance"] {
+            width: 250px !important;
+            max-width: 250px !important;
+            min-width: 250px !important;
+            height: 56px !important;
+            padding: 0.625rem 1.5rem !important;
+            font-weight: 600 !important;
+            background: linear-gradient(135deg, rgba(103, 162, 225, 0.18) 0%, rgba(103, 162, 225, 0.08) 100%) !important;
+            border: 1.5px solid rgba(103, 162, 225, 0.45) !important;
+            color: #8BB5F0 !important;
+            border-radius: 12px !important;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+            box-shadow: 0 3px 12px rgba(103, 162, 225, 0.15) !important;
+            position: relative !important;
+            overflow: hidden !important;
+            letter-spacing: 0.02em !important;
+        }
+        
+        /* Classe de fallback aplicada via JavaScript */
+        button.performance-button-fallback,
+        button[data-testid="stBaseButton-secondary"].performance-button-fallback,
+        button[data-testid="stBaseButton-primary"].performance-button-fallback {
+            width: 250px !important;
+            max-width: 250px !important;
+            min-width: 250px !important;
+            height: 56px !important;
+            padding: 0.625rem 1.5rem !important;
+            font-weight: 600 !important;
+            background: linear-gradient(135deg, rgba(103, 162, 225, 0.18) 0%, rgba(103, 162, 225, 0.08) 100%) !important;
+            border: 1.5px solid rgba(103, 162, 225, 0.45) !important;
+            color: #8BB5F0 !important;
+            border-radius: 12px !important;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+            box-shadow: 0 3px 12px rgba(103, 162, 225, 0.15) !important;
+            position: relative !important;
+            overflow: hidden !important;
+            letter-spacing: 0.02em !important;
+        }
+        
+        /* Múltiplos seletores com alta especificidade para garantir prioridade */
+        /* Ordem: do mais específico ao menos específico */
         button[data-testid="stBaseButton-secondary"]#btn_performance_by_pool,
         button[data-testid="stBaseButton-primary"]#btn_performance_by_pool,
+        button[data-testid*="stBaseButton"]#btn_performance_by_pool,
         .stButton > button#btn_performance_by_pool,
-        button.performance-button#btn_performance_by_pool,
-        button[data-button-type="performance"]#btn_performance_by_pool {
-            width: 250px !important;      /* Alterado */
-            min-width: 250px !important;  /* Alterado */
-            max-width: 250px !important;  /* Alterado */
-            height: 44px !important;
-            
-            background: linear-gradient(135deg, rgba(177, 172, 241, 0.18) 0%, rgba(177, 172, 241, 0.08) 100%) !important;
-            border: 1.5px solid rgba(177, 172, 241, 0.45) !important;
-            color: #C4BFF5 !important;
-            font-weight: 600 !important;
-            padding: 0.625rem 1.5rem !important;
-            border-radius: 12px !important;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
-            box-shadow: 0 3px 12px rgba(177, 172, 241, 0.15) !important;
-            position: relative !important;
-            overflow: hidden !important;
-            letter-spacing: 0.02em !important;
-        }
-        
-        /* Seletor adicional usando classe performance-button (caso o ID não seja aplicado) */
-        button.performance-button[data-testid="stBaseButton-secondary"],
-        button.performance-button[data-testid="stBaseButton-primary"] {
+        div[data-testid="stButton"] > button#btn_performance_by_pool,
+        button#btn_performance_by_pool,
+        #btn_performance_by_pool {
+            /* width precisa de !important porque pode ser sobrescrito por estilos inline do Streamlit */
             width: 250px !important;
-            min-width: 250px !important;
             max-width: 250px !important;
-            height: 44px !important;
-            
-            background: linear-gradient(135deg, rgba(177, 172, 241, 0.18) 0%, rgba(177, 172, 241, 0.08) 100%) !important;
-            border: 1.5px solid rgba(177, 172, 241, 0.45) !important;
-            color: #C4BFF5 !important;
-            font-weight: 600 !important;
+            min-width: 250px !important;
+            height: 56px !important;
             padding: 0.625rem 1.5rem !important;
+            font-weight: 600 !important;
+            background: linear-gradient(135deg, rgba(103, 162, 225, 0.18) 0%, rgba(103, 162, 225, 0.08) 100%) !important;
+            border: 1.5px solid rgba(103, 162, 225, 0.45) !important;
+            color: #8BB5F0 !important;
             border-radius: 12px !important;
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
-            box-shadow: 0 3px 12px rgba(177, 172, 241, 0.15) !important;
+            box-shadow: 0 3px 12px rgba(103, 162, 225, 0.15) !important;
             position: relative !important;
             overflow: hidden !important;
             letter-spacing: 0.02em !important;
         }
         
-        /* Pseudo-elements para o botão de performance */
+        /* Pseudo-elements para o botão de performance (atributo data) */
+        button[data-button-type="performance"]::before,
+        button[data-testid="stBaseButton-secondary"][data-button-type="performance"]::before {
+            content: '' !important;
+            position: absolute !important;
+            top: 0 !important;
+            left: -100% !important;
+            width: 100% !important;
+            height: 100% !important;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.15), transparent) !important;
+            transition: left 0.6s ease !important;
+        }
+        
+        button[data-button-type="performance"]::after,
+        button[data-testid="stBaseButton-secondary"][data-button-type="performance"]::after {
+            content: '' !important;
+            position: absolute !important;
+            inset: 0 !important;
+            border-radius: 12px !important;
+            padding: 1.5px !important;
+            background: linear-gradient(135deg, rgba(103, 162, 225, 0.6), rgba(103, 162, 225, 0.2)) !important;
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0) !important;
+            -webkit-mask-composite: xor !important;
+            mask-composite: exclude !important;
+            opacity: 0 !important;
+            transition: opacity 0.3s !important;
+        }
+        
+        button[data-button-type="performance"]:hover,
+        button[data-testid="stBaseButton-secondary"][data-button-type="performance"]:hover {
+            background: linear-gradient(135deg, rgba(103, 162, 225, 0.28) 0%, rgba(103, 162, 225, 0.15) 100%) !important;
+            border-color: rgba(103, 162, 225, 0.7) !important;
+            transform: translateY(-3px) scale(1.02) !important;
+            box-shadow: 0 6px 20px rgba(103, 162, 225, 0.3) !important;
+            color: #A8C8F5 !important;
+        }
+        
+        button[data-button-type="performance"]:hover::before,
+        button[data-testid="stBaseButton-secondary"][data-button-type="performance"]:hover::before {
+            left: 100% !important;
+        }
+        
+        button[data-button-type="performance"]:hover::after,
+        button[data-testid="stBaseButton-secondary"][data-button-type="performance"]:hover::after {
+            opacity: 1 !important;
+        }
+        
+        button[data-button-type="performance"]:active,
+        button[data-testid="stBaseButton-secondary"][data-button-type="performance"]:active {
+            transform: translateY(-1px) scale(1.01) !important;
+            box-shadow: 0 3px 12px rgba(103, 162, 225, 0.2) !important;
+        }
+        
+        /* Pseudo-elements para o botão de performance (classe de fallback) */
+        button.performance-button-fallback::before {
+            content: '' !important;
+            position: absolute !important;
+            top: 0 !important;
+            left: -100% !important;
+            width: 100% !important;
+            height: 100% !important;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.15), transparent) !important;
+            transition: left 0.6s ease !important;
+        }
+        
+        button.performance-button-fallback::after {
+            content: '' !important;
+            position: absolute !important;
+            inset: 0 !important;
+            border-radius: 12px !important;
+            padding: 1.5px !important;
+            background: linear-gradient(135deg, rgba(103, 162, 225, 0.6), rgba(103, 162, 225, 0.2)) !important;
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0) !important;
+            -webkit-mask-composite: xor !important;
+            mask-composite: exclude !important;
+            opacity: 0 !important;
+            transition: opacity 0.3s !important;
+        }
+        
+        button.performance-button-fallback:hover {
+            background: linear-gradient(135deg, rgba(103, 162, 225, 0.28) 0%, rgba(103, 162, 225, 0.15) 100%) !important;
+            border-color: rgba(103, 162, 225, 0.7) !important;
+            transform: translateY(-3px) scale(1.02) !important;
+            box-shadow: 0 6px 20px rgba(103, 162, 225, 0.3) !important;
+            color: #A8C8F5 !important;
+        }
+        
+        button.performance-button-fallback:hover::before {
+            left: 100% !important;
+        }
+        
+        button.performance-button-fallback:hover::after {
+            opacity: 1 !important;
+        }
+        
+        button.performance-button-fallback:active {
+            transform: translateY(-1px) scale(1.01) !important;
+            box-shadow: 0 3px 12px rgba(103, 162, 225, 0.2) !important;
+        }
+        
+        /* Pseudo-elements para o botão de performance (ID) */
         #btn_performance_by_pool::before,
         button#btn_performance_by_pool::before {
             content: '' !important;
@@ -325,7 +590,7 @@ def inject_css():
             inset: 0 !important;
             border-radius: 12px !important;
             padding: 1.5px !important;
-            background: linear-gradient(135deg, rgba(177, 172, 241, 0.6), rgba(177, 172, 241, 0.2)) !important;
+            background: linear-gradient(135deg, rgba(103, 162, 225, 0.6), rgba(103, 162, 225, 0.2)) !important;
             -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0) !important;
             -webkit-mask-composite: xor !important;
             mask-composite: exclude !important;
@@ -335,11 +600,11 @@ def inject_css():
         
         #btn_performance_by_pool:hover,
         button#btn_performance_by_pool:hover {
-            background: linear-gradient(135deg, rgba(177, 172, 241, 0.28) 0%, rgba(177, 172, 241, 0.15) 100%) !important;
-            border-color: rgba(177, 172, 241, 0.7) !important;
+            background: linear-gradient(135deg, rgba(103, 162, 225, 0.28) 0%, rgba(103, 162, 225, 0.15) 100%) !important;
+            border-color: rgba(103, 162, 225, 0.7) !important;
             transform: translateY(-3px) scale(1.02) !important;
-            box-shadow: 0 6px 20px rgba(177, 172, 241, 0.3) !important;
-            color: #D4CFF8 !important;
+            box-shadow: 0 6px 20px rgba(103, 162, 225, 0.3) !important;
+            color: #A8C8F5 !important;
         }
         
         #btn_performance_by_pool:hover::before,
@@ -355,13 +620,17 @@ def inject_css():
         #btn_performance_by_pool:active,
         button#btn_performance_by_pool:active {
             transform: translateY(-1px) scale(1.01) !important;
-            box-shadow: 0 3px 12px rgba(177, 172, 241, 0.2) !important;
+            box-shadow: 0 3px 12px rgba(103, 162, 225, 0.2) !important;
         }
         
-        /* Fallback para performance-button (compatibilidade) */
-        .stButton > button.performance-button:not(#btn_performance_by_pool) {
-            min-width: 250px !important;
+        /* Seletor adicional com máxima especificidade para garantir que o botão de performance nunca receba o estilo padrão */
+        button[data-testid="stBaseButton-secondary"]#btn_performance_by_pool.st-emotion-cache-1anq8dj,
+        button[data-testid="stBaseButton-primary"]#btn_performance_by_pool.st-emotion-cache-1anq8dj,
+        button[data-testid*="stBaseButton"]#btn_performance_by_pool[class*="st-emotion"] {
             width: 250px !important;
+            min-width: 250px !important;
+            max-width: 250px !important;
+            height: 56px !important;
         }
 
         /* --- LOGOUT BUTTON --- */
@@ -479,7 +748,114 @@ def inject_css():
         header {visibility: hidden;}
     </style>
     <script>
-        // Note: Button class application is handled in individual pages
+        console.log('[Button IDs] Script do utils.py carregado!');
+        
+        // Script de fallback para aplicar classe ao botão de performance
+        (function() {
+            function applyPerformanceButtonClass() {
+                const contexts = [
+                    document,
+                    window.parent?.document || document,
+                    window.top?.document || document
+                ];
+                
+                contexts.forEach((doc, ctxIndex) => {
+                    if (!doc) return;
+                    
+                    const buttons = doc.querySelectorAll('button[data-testid*="stBaseButton"]');
+                    
+                    buttons.forEach((button, index) => {
+                        // Tenta pegar o texto de múltiplas formas
+                        let text = '';
+                        try {
+                            text = (button.textContent || button.innerText || '').trim();
+                            if (!text || text.length === 0) {
+                                const markdownEl = button.querySelector('[data-testid="stMarkdownContainer"]');
+                                if (markdownEl) {
+                                    text = (markdownEl.textContent || markdownEl.innerText || '').trim();
+                                }
+                            }
+                            if (!text || text.length === 0) {
+                                const pEl = button.querySelector('p');
+                                if (pEl) {
+                                    text = (pEl.textContent || pEl.innerText || '').trim();
+                                }
+                            }
+                        } catch(e) {}
+                        
+                        const textLower = text.toLowerCase();
+                        
+                        // Se contém "Show Performance" ou "Performance by Pool" ou emoji de lupa
+                        if (text.includes('Show Performance') || text.includes('Performance by Pool') || textLower.includes('performance') || text.includes('🔍')) {
+                            // Aplica ID se ainda não tiver
+                            if (!button.id || button.id !== 'btn_performance_by_pool') {
+                                button.id = 'btn_performance_by_pool';
+                            }
+                            // Aplica atributo data customizado
+                            button.setAttribute('data-button-type', 'performance');
+                            // Aplica classe de fallback
+                            button.classList.add('performance-button-fallback');
+                            
+                            // Aplica TODOS os estilos inline diretamente (máxima prioridade)
+                            const styles = {
+                                'width': '250px',
+                                'min-width': '250px',
+                                'max-width': '250px',
+                                'height': '56px',
+                                'padding': '0.625rem 1.5rem',
+                                'font-weight': '600',
+                                'background': 'linear-gradient(135deg, rgba(103, 162, 225, 0.18) 0%, rgba(103, 162, 225, 0.08) 100%)',
+                                'border': '1.5px solid rgba(103, 162, 225, 0.45)',
+                                'color': '#8BB5F0',
+                                'border-radius': '12px',
+                                'transition': 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                                'box-shadow': '0 3px 12px rgba(103, 162, 225, 0.15)',
+                                'position': 'relative',
+                                'overflow': 'hidden',
+                                'letter-spacing': '0.02em'
+                            };
+                            
+                            Object.keys(styles).forEach(prop => {
+                                button.style.setProperty(prop, styles[prop], 'important');
+                            });
+                            
+                            console.log('[Button IDs] ✅ Botão performance estilizado via utils.py');
+                        }
+                    });
+                });
+            }
+            
+            // Executa imediatamente
+            applyPerformanceButtonClass();
+            
+            // Executa após delays
+            setTimeout(applyPerformanceButtonClass, 100);
+            setTimeout(applyPerformanceButtonClass, 300);
+            setTimeout(applyPerformanceButtonClass, 500);
+            setTimeout(applyPerformanceButtonClass, 1000);
+            
+            // Executa repetidamente
+            setInterval(applyPerformanceButtonClass, 2000);
+            
+            // Observa mudanças no DOM
+            if (window.MutationObserver) {
+                const observer = new MutationObserver(() => {
+                    setTimeout(applyPerformanceButtonClass, 50);
+                });
+                
+                const contexts = [
+                    document,
+                    window.parent?.document || document,
+                    window.top?.document || document
+                ];
+                
+                contexts.forEach(doc => {
+                    if (doc && doc.body) {
+                        observer.observe(doc.body, { childList: true, subtree: true });
+                    }
+                });
+            }
+        })();
     </script>
     """, unsafe_allow_html=True)
 
