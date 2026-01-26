@@ -120,66 +120,46 @@ st.markdown("---")
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 🔍 Pool Selection")
 
-if 'selected_pools' not in st.session_state:
-    st.session_state.selected_pools = []
+# Initialize session state - default to 'all' (show everything)
 if 'pool_filter_mode' not in st.session_state:
-    st.session_state.pool_filter_mode = 'top20'
+    st.session_state.pool_filter_mode = 'all'  # Default: show all pools
 
 col_btn1, col_btn2 = st.sidebar.columns(2)
 
 with col_btn1:
     if st.button("Top 20", key="btn_top20"):
         st.session_state.pool_filter_mode = 'top20'
-        st.session_state.selected_pools = []
+        st.rerun()
 
 with col_btn2:
     if st.button("Worst 20", key="btn_worst20"):
         st.session_state.pool_filter_mode = 'worst20'
-        st.session_state.selected_pools = []
+        st.rerun()
 
-if st.session_state.pool_filter_mode == 'worst20':
-    filter_pools = sorted([str(p) for p in utils.get_worst_pools(df, n=20)])
-    filter_label = "Select from Worst 20 Pools"
+# Show "Select All" button only when a filter is active (top20 or worst20)
+if st.session_state.pool_filter_mode in ['top20', 'worst20']:
+    if st.sidebar.button("Select All", key="btn_select_all"):
+        st.session_state.pool_filter_mode = 'all'
+        st.rerun()
+
+# Filter data based on mode
+if st.session_state.pool_filter_mode == 'top20':
+    # Get top 20 pools
+    top_pools = utils.get_top_pools(df, n=20)
+    top_pools_list = [str(p) for p in top_pools]
+    df_display = df_sim[df_sim['pool_symbol'].isin(top_pools_list)].copy()
+    st.info(f"📊 Showing analysis for Top 20 Pools ({len(top_pools_list)} pools)")
+elif st.session_state.pool_filter_mode == 'worst20':
+    # Get worst 20 pools
+    worst_pools = utils.get_worst_pools(df, n=20)
+    worst_pools_list = [str(p) for p in worst_pools]
+    df_display = df_sim[df_sim['pool_symbol'].isin(worst_pools_list)].copy()
+    st.info(f"📊 Showing analysis for Worst 20 Pools ({len(worst_pools_list)} pools)")
 else:
-    filter_pools = sorted([str(p) for p in utils.get_top_pools(df, n=20)])
-    filter_label = "Select from Top 20 Pools"
-
-# Clear invalid selections when filter mode changes
-valid_sel = [p for p in st.session_state.selected_pools if p in filter_pools]
-if len(valid_sel) != len(st.session_state.selected_pools):
-    st.session_state.selected_pools = valid_sel
-
-# Use session_state directly as default, but sync with filter_pools
-if st.session_state.selected_pools and all(p in filter_pools for p in st.session_state.selected_pools):
-    default_selection = st.session_state.selected_pools
-else:
-    default_selection = []
-
-if st.sidebar.button("Select All", key="btn_select_all"):
-    st.session_state.selected_pools = filter_pools.copy()
-    st.rerun()
-
-# Use dynamic key based on filter mode to force update
-multiselect_key = f"multiselect_pools_home_{st.session_state.pool_filter_mode}"
-
-selected_pools = st.sidebar.multiselect(
-    filter_label,
-    options=filter_pools,
-    default=default_selection,
-    help="Select specific pools to view individual analysis",
-    key=multiselect_key
-)
-
-# Always update session state with current selection
-st.session_state.selected_pools = selected_pools
-
-filter_by_pools = len(selected_pools) > 0
-
-if filter_by_pools:
-    df_display = df_sim[df_sim['pool_symbol'].isin(selected_pools)].copy()
-    st.info(f"📊 Showing analysis for {len(selected_pools)} selected pool(s)")
-else:
+    # 'all' mode - show everything
     df_display = df_sim.copy()
+    total_pools = len(df_sim['pool_symbol'].unique()) if 'pool_symbol' in df_sim.columns else 0
+    st.info(f"📊 Showing analysis for all pools ({total_pools} pools)")
 
 total_revenue = df_display['sim_dao_revenue'].sum() + df_display['sim_holders_revenue'].sum() + df_display['sim_incentives_revenue'].sum()
 total_dao = df_display['sim_dao_revenue'].sum()
@@ -306,9 +286,10 @@ fig_comparison.update_layout(
 
 st.plotly_chart(fig_comparison, use_container_width=True, key="revenue_comparison")
 
-if filter_by_pools:
+# Show detailed analysis when filtering by Top 20 or Worst 20
+if st.session_state.pool_filter_mode in ['top20', 'worst20']:
     st.markdown("---")
-    st.markdown("### 📋 Selected Pools Detailed Analysis")
+    st.markdown("### 📋 Pools Detailed Analysis")
     
     pool_summary = df_display.groupby('pool_symbol').agg({
         'sim_dao_revenue': 'sum',
@@ -335,7 +316,10 @@ if filter_by_pools:
     st.markdown("---")
     st.markdown("### 📊 Individual Pool Analysis")
     
-    for idx, pool in enumerate(selected_pools):
+    # Get list of pools from filtered data
+    filtered_pools = sorted(df_display['pool_symbol'].unique().tolist())
+    
+    for idx, pool in enumerate(filtered_pools):
         pool_data = df_display[df_display['pool_symbol'] == pool]
         if len(pool_data) > 0:
             category = pool_data['pool_category'].iloc[0] if 'pool_category' in pool_data.columns else 'Unknown'
