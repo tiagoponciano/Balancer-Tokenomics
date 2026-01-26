@@ -34,10 +34,12 @@ def get_supabase_client():
     except Exception:
         return None
 
-def download_csv_from_supabase(filename):
+def download_csv_from_supabase(filename, return_error=False):
     """Download CSV file from Supabase Storage (supports both public and private buckets)"""
     supabase = get_supabase_client()
     if not supabase:
+        if return_error:
+            return None, "Supabase client not initialized (missing URL or keys)"
         return None
     
     try:
@@ -48,10 +50,17 @@ def download_csv_from_supabase(filename):
         if response:
             # Convert bytes to DataFrame
             df = pd.read_csv(io.BytesIO(response))
+            if return_error:
+                return df, None
             return df
     except Exception as e:
+        error_msg = str(e)
+        if return_error:
+            return None, error_msg
         # Silently fail - will fallback to local filesystem
         pass
+    if return_error:
+        return None, "File not found in Supabase Storage"
     return None
 
 def load_aggregated_csv(filename):
@@ -1312,6 +1321,58 @@ def load_data():
         if df is None or df.empty:
             error_msg = st.error("❌ CSV file not found or is empty.")
             with st.expander("🔍 Debug Info - Click to see details"):
+                # Supabase Configuration Info
+                st.write("### 🔐 Supabase Configuration")
+                supabase_configured = bool(SUPABASE_URL)
+                st.write(f"**Supabase URL configured:** {'✅ Yes' if supabase_configured else '❌ No'}")
+                if supabase_configured:
+                    st.write(f"**Supabase URL:** `{SUPABASE_URL}`")
+                    st.write(f"**Bucket name:** `{SUPABASE_BUCKET}`")
+                    
+                    # Check which key is being used
+                    has_service_key = bool(SUPABASE_SERVICE_KEY)
+                    has_anon_key = bool(SUPABASE_ANON_KEY)
+                    if has_service_key:
+                        st.write(f"**Authentication:** ✅ Using SERVICE_KEY (for private buckets)")
+                        key_preview = SUPABASE_SERVICE_KEY[:20] + "..." if len(SUPABASE_SERVICE_KEY) > 20 else SUPABASE_SERVICE_KEY
+                        st.write(f"**Service Key preview:** `{key_preview}`")
+                    elif has_anon_key:
+                        st.write(f"**Authentication:** ⚠️ Using ANON_KEY (for public buckets)")
+                        key_preview = SUPABASE_ANON_KEY[:20] + "..." if len(SUPABASE_ANON_KEY) > 20 else SUPABASE_ANON_KEY
+                        st.write(f"**Anon Key preview:** `{key_preview}`")
+                    else:
+                        st.write(f"**Authentication:** ❌ No keys configured")
+                    
+                    # Try to get error from Supabase
+                    st.write("\n### 📥 Supabase Download Attempt")
+                    df_supabase, error = download_csv_from_supabase('balancer_v2_financial_master_final.csv', return_error=True)
+                    if df_supabase is not None and not df_supabase.empty:
+                        st.write("✅ **File downloaded successfully from Supabase!**")
+                        st.write(f"**Rows:** {len(df_supabase)}")
+                        st.write(f"**Columns:** {', '.join(df_supabase.columns[:5].tolist())}...")
+                    else:
+                        st.write("❌ **Failed to download from Supabase**")
+                        if error:
+                            st.write(f"**Error:** `{error}`")
+                        else:
+                            st.write("**Error:** File not found in Supabase Storage")
+                        
+                        # Try to list files in bucket
+                        try:
+                            supabase = get_supabase_client()
+                            if supabase:
+                                st.write("\n**Attempting to list files in bucket...**")
+                                files = supabase.storage.from_(SUPABASE_BUCKET).list()
+                                if files:
+                                    st.write(f"**Files found in bucket `{SUPABASE_BUCKET}`:**")
+                                    for file_info in files[:10]:
+                                        st.write(f"  - {file_info.get('name', 'Unknown')}")
+                                else:
+                                    st.write(f"**No files found in bucket `{SUPABASE_BUCKET}`**")
+                        except Exception as e:
+                            st.write(f"**Could not list files:** `{str(e)}`")
+                
+                st.write("\n### 💾 Local Filesystem")
                 st.write(f"**Current working directory:** `{cwd}`")
                 st.write(f"**Script directory:** `{script_dir}`")
                 st.write(f"**Project root:** `{project_root}`")
