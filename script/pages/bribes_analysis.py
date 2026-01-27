@@ -2,6 +2,7 @@ import streamlit as st
 import utils
 import plotly.graph_objects as go
 import plotly.express as px
+from plotly.subplots import make_subplots
 import pandas as pd
 import numpy as np
 from datetime import datetime
@@ -106,8 +107,6 @@ if 'performance_page' not in st.session_state:
     st.session_state.performance_page = 1
 if 'detailed_analysis_page' not in st.session_state:
     st.session_state.detailed_analysis_page = 1
-if 'visualizations_page' not in st.session_state:
-    st.session_state.visualizations_page = 1
 
 components.html("""
 <script>
@@ -883,30 +882,31 @@ with tab3:
         )
         st.dataframe(display_df, use_container_width=True, hide_index=True)
         
-        # Add visualization if there's data
-        vebal_with_data = ranking_df[ranking_df['veBAL Votes'] > 0]
-        if not vebal_with_data.empty:
-            st.markdown("#### 📊 Top Pools by veBAL Votes")
-            top_10_vebal = vebal_with_data.nlargest(10, 'veBAL Votes')
-            fig_vebal = px.bar(
-                top_10_vebal,
-                x='pool',
-                y='veBAL Votes',
-                title="Top Pools by veBAL Votes",
-                labels={'veBAL Votes': 'veBAL Votes', 'pool': 'Pool'},
-                color='veBAL Votes',
-                color_continuous_scale='Blues'
-            )
-            fig_vebal.update_layout(
-                plot_bgcolor='rgba(0,0,0,0)',
-                paper_bgcolor='rgba(0,0,0,0)',
-                font_color='white',
-                title=dict(font=dict(color='white', size=16)),
-                xaxis=dict(gridcolor='rgba(255,255,255,0.1)', tickangle=-45),
-                yaxis=dict(gridcolor='rgba(255,255,255,0.1)'),
-                showlegend=False
-            )
-            st.plotly_chart(fig_vebal, use_container_width=True)
+        # Add visualization if there's data (only show when "Select All" is active)
+        if st.session_state.pool_filter_mode_bribes == 'all':
+            vebal_with_data = ranking_df[ranking_df['veBAL Votes'] > 0]
+            if not vebal_with_data.empty:
+                st.markdown("#### 📊 Top Pools by veBAL Votes")
+                top_10_vebal = vebal_with_data.nlargest(10, 'veBAL Votes')
+                fig_vebal = px.bar(
+                    top_10_vebal,
+                    x='pool',
+                    y='veBAL Votes',
+                    title="Top Pools by veBAL Votes",
+                    labels={'veBAL Votes': 'veBAL Votes', 'pool': 'Pool'},
+                    color='veBAL Votes',
+                    color_continuous_scale='Blues'
+                )
+                fig_vebal.update_layout(
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    font_color='white',
+                    title=dict(font=dict(color='white', size=16)),
+                    xaxis=dict(gridcolor='rgba(255,255,255,0.1)', tickangle=-45),
+                    yaxis=dict(gridcolor='rgba(255,255,255,0.1)'),
+                    showlegend=False
+                )
+                st.plotly_chart(fig_vebal, use_container_width=True)
     elif 'vebal_votes' in pool_bribes.columns:
         # Fallback: show from pool_bribes
         vebal_data = pool_bribes[pool_bribes['vebal_votes'].notna() & (pool_bribes['vebal_votes'] > 0)].copy()
@@ -918,28 +918,29 @@ with tab3:
             top_vebal['Ranking'] = top_vebal['Ranking'].apply(lambda x: f"#{int(x)}" if pd.notna(x) else "N/A")
             st.dataframe(top_vebal, use_container_width=True, hide_index=True)
             
-            # Add visualization
-            st.markdown("#### 📊 Top Pools by veBAL Votes")
-            top_10_vebal = vebal_data.nlargest(10, 'vebal_votes')
-            fig_vebal = px.bar(
-                top_10_vebal,
-                x=pool_col,
-                y='vebal_votes',
-                title="Top Pools by veBAL Votes",
-                labels={'vebal_votes': 'veBAL Votes', pool_col: 'Pool'},
-                color='vebal_votes',
-                color_continuous_scale='Blues'
-            )
-            fig_vebal.update_layout(
-                plot_bgcolor='rgba(0,0,0,0)',
-                paper_bgcolor='rgba(0,0,0,0)',
-                font_color='white',
-                title=dict(font=dict(color='white', size=16)),
-                xaxis=dict(gridcolor='rgba(255,255,255,0.1)', tickangle=-45),
-                yaxis=dict(gridcolor='rgba(255,255,255,0.1)'),
-                showlegend=False
-            )
-            st.plotly_chart(fig_vebal, use_container_width=True)
+            # Add visualization (only show when "Select All" is active)
+            if st.session_state.pool_filter_mode_bribes == 'all':
+                st.markdown("#### 📊 Top Pools by veBAL Votes")
+                top_10_vebal = vebal_data.nlargest(10, 'vebal_votes')
+                fig_vebal = px.bar(
+                    top_10_vebal,
+                    x=pool_col,
+                    y='vebal_votes',
+                    title="Top Pools by veBAL Votes",
+                    labels={'vebal_votes': 'veBAL Votes', pool_col: 'Pool'},
+                    color='vebal_votes',
+                    color_continuous_scale='Blues'
+                )
+                fig_vebal.update_layout(
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    font_color='white',
+                    title=dict(font=dict(color='white', size=16)),
+                    xaxis=dict(gridcolor='rgba(255,255,255,0.1)', tickangle=-45),
+                    yaxis=dict(gridcolor='rgba(255,255,255,0.1)'),
+                    showlegend=False
+                )
+                st.plotly_chart(fig_vebal, use_container_width=True)
         else:
             st.info("No veBAL votes data available for the selected pools")
     else:
@@ -1120,80 +1121,8 @@ st.markdown("---")
 # Visualizations
 st.markdown("### 📈 Visualizations")
 
-# Pagination for visualizations (show one graph at a time for better readability)
-all_viz = ['bribe_ranking', 'bribes_votes_lollipop', 'bribe_efficiency']
-total_viz_pages = len(all_viz)
-
-if total_viz_pages > 1:
-    pag_col1, pag_col2, pag_col3, pag_col4 = st.columns([0.2, 0.2, 0.2, 0.4])
-    with pag_col1:
-        if st.button("◀ Previous", disabled=(st.session_state.visualizations_page <= 1), key="prev_viz"):
-            st.session_state.visualizations_page = max(1, st.session_state.visualizations_page - 1)
-            st.rerun()
-    with pag_col2:
-        if st.button("Next ▶", disabled=(st.session_state.visualizations_page >= total_viz_pages), key="next_viz"):
-            st.session_state.visualizations_page = min(total_viz_pages, st.session_state.visualizations_page + 1)
-            st.rerun()
-    with pag_col3:
-        st.write(f"Page {st.session_state.visualizations_page} of {total_viz_pages}")
-    with pag_col4:
-        viz_names = {
-            1: "💰 Top Pools by Bribe Amount",
-            2: "📊 Bribes vs veBAL Votes: Efficiency Analysis",
-            3: "📈 Power Concentration: Lorenz Curve"
-        }
-        st.write(f"**{viz_names.get(st.session_state.visualizations_page, 'Visualization')}**")
-
-current_viz = all_viz[st.session_state.visualizations_page - 1]
-
-if current_viz == 'bribe_ranking':
-    # First visualization: Top Pools by Bribe Amount (Horizontal Bar Chart)
-    if bribe_col in pool_bribes.columns and not pool_bribes.empty:
-        bar_data = pool_bribes[pool_bribes[bribe_col] > 0].copy()
-        if not bar_data.empty:
-            # Get top 15 pools for better readability
-            top_pools = bar_data.nlargest(15, bribe_col)
-            # Sort for horizontal bar chart (ascending for top-to-bottom display)
-            top_pools = top_pools.sort_values(bribe_col, ascending=True)
-            
-            # Use a single professional color (blue gradient)
-            fig_bar = px.bar(
-                top_pools,
-                x=bribe_col,
-                y=pool_col,
-                orientation='h',
-                title="💰 Top Pools by Total Bribes",
-                labels={bribe_col: 'Total Bribes (USD)', pool_col: 'Pool'},
-                color=bribe_col,
-                color_continuous_scale=[[0, '#1e3a5f'], [1, '#4a90e2']],  # Dark blue to light blue gradient
-                text=bribe_col
-            )
-            fig_bar.update_traces(
-                texttemplate='$%{text:,.0f}',
-                textposition='outside',
-                hovertemplate='<b>%{y}</b><br>Total Bribes: $%{x:,.0f}<extra></extra>',
-                marker=dict(line=dict(width=0))  # Remove bar borders
-            )
-            fig_bar.update_layout(
-                plot_bgcolor='rgba(0,0,0,0)',
-                paper_bgcolor='rgba(0,0,0,0)',
-                font_color='white',
-                title=dict(font=dict(color='white', size=18)),
-                xaxis=dict(gridcolor='rgba(255,255,255,0.1)', title='Total Bribes (USD)'),
-                yaxis=dict(gridcolor='rgba(255,255,255,0.1)', title=''),
-                height=max(500, len(top_pools) * 35),
-                showlegend=False,
-                coloraxis_showscale=False
-            )
-            st.plotly_chart(fig_bar, use_container_width=True)
-        else:
-            st.info("No data available for bribe ranking")
-    else:
-        st.info("Bribe data not available")
-
-elif current_viz == 'bribes_votes_lollipop':
-    # Second visualization: Bribes vs veBAL Votes (Dual-Axis Chart)
-    if 'vebal_votes' in pool_bribes.columns and bribe_col in pool_bribes.columns and not pool_bribes.empty:
+# Single visualization: Bribes vs veBAL Votes (Dual-Axis Chart)
+if 'vebal_votes' in pool_bribes.columns and bribe_col in pool_bribes.columns and not pool_bribes.empty:
         votes_data = pool_bribes[
             (pool_bribes[bribe_col] > 0) & 
             (pool_bribes['vebal_votes'].notna()) & 
@@ -1285,134 +1214,8 @@ elif current_viz == 'bribes_votes_lollipop':
                 st.info("No data available for votes visualization")
         else:
             st.info("No data available for votes visualization")
-    else:
-        st.info("Votes data not available")
-
-elif current_viz == 'bribe_efficiency':
-    # Third visualization: Power Concentration (Lorenz Curve)
-    if 'vebal_votes' in pool_bribes.columns and not pool_bribes.empty:
-        votes_data = pool_bribes[
-            (pool_bribes['vebal_votes'].notna()) & 
-            (pool_bribes['vebal_votes'] > 0)
-        ].copy()
-        if not votes_data.empty:
-            # Ensure numeric values
-            votes_data['vebal_votes'] = pd.to_numeric(votes_data['vebal_votes'], errors='coerce')
-            votes_data = votes_data[votes_data['vebal_votes'].notna() & (votes_data['vebal_votes'] > 0)]
-            
-            if not votes_data.empty:
-                # Sort pools by votes (descending)
-                votes_sorted = votes_data.sort_values('vebal_votes', ascending=False).reset_index(drop=True)
-                
-                # Calculate cumulative percentages
-                total_votes = votes_sorted['vebal_votes'].sum()
-                total_pools = len(votes_sorted)
-                
-                # Cumulative percentage of pools (X-axis)
-                votes_sorted['cumulative_pool_pct'] = ((votes_sorted.index + 1) / total_pools) * 100
-                
-                # Cumulative percentage of votes (Y-axis)
-                votes_sorted['cumulative_votes'] = votes_sorted['vebal_votes'].cumsum()
-                votes_sorted['cumulative_votes_pct'] = (votes_sorted['cumulative_votes'] / total_votes) * 100
-                
-                # Create Lorenz Curve
-                fig = go.Figure()
-                
-                # Add perfect equality line (diagonal)
-                fig.add_trace(go.Scatter(
-                    x=[0, 100],
-                    y=[0, 100],
-                    mode='lines',
-                    name='Perfect Equality',
-                    line=dict(color='rgba(255, 255, 255, 0.3)', width=2, dash='dash'),
-                    hovertemplate='Perfect Equality Line<extra></extra>'
-                ))
-                
-                # Add Lorenz Curve
-                fig.add_trace(go.Scatter(
-                    x=[0] + votes_sorted['cumulative_pool_pct'].tolist(),
-                    y=[0] + votes_sorted['cumulative_votes_pct'].tolist(),
-                    mode='lines',
-                    name='Lorenz Curve',
-                    line=dict(color='#4a90e2', width=3),
-                    fill='tozeroy',
-                    fillcolor='rgba(74, 144, 226, 0.2)',
-                    hovertemplate='%{x:.1f}% of Pools<br>%{y:.1f}% of Votes<extra></extra>'
-                ))
-                
-                # Calculate Gini Coefficient
-                # Gini = 1 - 2 * (area under Lorenz curve)
-                # Approximate using trapezoidal rule
-                x_values = np.array([0] + votes_sorted['cumulative_pool_pct'].tolist())
-                y_values = np.array([0] + votes_sorted['cumulative_votes_pct'].tolist())
-                
-                # Calculate area under curve using trapezoidal rule manually
-                # Formula: Area = Σ (x[i+1] - x[i]) * (y[i] + y[i+1]) / 2
-                # Since x and y are in percentage (0-100), divide by 10000 to normalize to 0-1
-                area_under_curve = 0
-                for i in range(len(x_values) - 1):
-                    width = x_values[i+1] - x_values[i]
-                    avg_height = (y_values[i] + y_values[i+1]) / 2
-                    area_under_curve += width * avg_height
-                
-                # Normalize to 0-1 (divide by 10000 since both axes are 0-100)
-                area_under_curve = area_under_curve / 10000
-                gini_coefficient = 1 - (2 * area_under_curve)
-                
-                # Add annotation with Gini coefficient
-                fig.add_annotation(
-                    x=50,
-                    y=20,
-                    text=f'Gini Coefficient: {gini_coefficient:.3f}<br>{"High Concentration" if gini_coefficient > 0.5 else "Moderate Concentration" if gini_coefficient > 0.3 else "Low Concentration"}',
-                    showarrow=False,
-                    font=dict(color='white', size=12),
-                    bgcolor='rgba(0,0,0,0.7)',
-                    bordercolor='rgba(255,255,255,0.3)',
-                    borderwidth=1,
-                    align='center'
-                )
-                
-                fig.update_layout(
-                    plot_bgcolor='rgba(0,0,0,0)',
-                    paper_bgcolor='rgba(0,0,0,0)',
-                    font_color='white',
-                    title=dict(text="📈 Power Concentration: Lorenz Curve", font=dict(color='white', size=18)),
-                    xaxis=dict(
-                        gridcolor='rgba(255,255,255,0.1)',
-                        title='Cumulative % of Pools',
-                        range=[0, 100],
-                        tickformat='.0f',
-                        ticksuffix='%'
-                    ),
-                    yaxis=dict(
-                        gridcolor='rgba(255,255,255,0.1)',
-                        title='Cumulative % of Votes',
-                        range=[0, 100],
-                        tickformat='.0f',
-                        ticksuffix='%'
-                    ),
-                    height=600,
-                    hovermode='x unified',
-                    legend=dict(
-                        bgcolor='rgba(0,0,0,0.5)',
-                        font=dict(color='white'),
-                        yanchor='top',
-                        y=0.99,
-                        xanchor='left',
-                        x=0.01
-                    )
-                )
-                
-                # Add info box explaining the chart
-                st.info(f"💡 **Power Concentration Analysis**: The Lorenz Curve shows vote distribution across pools. A curve closer to the diagonal indicates more equal distribution. **Gini Coefficient: {gini_coefficient:.3f}** (0 = perfect equality, 1 = perfect inequality). Currently showing {total_pools} pools with {total_votes:,.0f} total votes.")
-                
-                st.plotly_chart(fig, use_container_width=True)
-            else:
-                st.info("No data available for concentration analysis")
-        else:
-            st.info("No data available for concentration analysis")
-    else:
-        st.info("Votes data not available for concentration analysis")
+else:
+    st.info("Votes data not available")
 
 # Top pools bar chart
 st.markdown("---")
