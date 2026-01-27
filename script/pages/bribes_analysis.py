@@ -106,6 +106,8 @@ if 'performance_page' not in st.session_state:
     st.session_state.performance_page = 1
 if 'detailed_analysis_page' not in st.session_state:
     st.session_state.detailed_analysis_page = 1
+if 'visualizations_page' not in st.session_state:
+    st.session_state.visualizations_page = 1
 
 components.html("""
 <script>
@@ -1118,9 +1120,34 @@ st.markdown("---")
 # Visualizations
 st.markdown("### 📈 Visualizations")
 
-viz_col1, viz_col2, viz_col3 = st.columns(3)
+# Pagination for visualizations (show one graph at a time for better readability)
+all_viz = ['bribe_amount', 'bribes_votes', 'bribes_vebal']
+total_viz_pages = len(all_viz)
 
-with viz_col1:
+if total_viz_pages > 1:
+    pag_col1, pag_col2, pag_col3, pag_col4 = st.columns([0.2, 0.2, 0.2, 0.4])
+    with pag_col1:
+        if st.button("◀ Previous", disabled=(st.session_state.visualizations_page <= 1), key="prev_viz"):
+            st.session_state.visualizations_page = max(1, st.session_state.visualizations_page - 1)
+            st.rerun()
+    with pag_col2:
+        if st.button("Next ▶", disabled=(st.session_state.visualizations_page >= total_viz_pages), key="next_viz"):
+            st.session_state.visualizations_page = min(total_viz_pages, st.session_state.visualizations_page + 1)
+            st.rerun()
+    with pag_col3:
+        st.write(f"Page {st.session_state.visualizations_page} of {total_viz_pages}")
+    with pag_col4:
+        viz_names = {
+            1: "💰 Bribe Amount by Pool",
+            2: "📊 Bribes vs veBAL Votes",
+            3: "🗳️ Bribes vs veBAL Votes"
+        }
+        st.write(f"**{viz_names.get(st.session_state.visualizations_page, 'Visualization')}**")
+
+current_viz = all_viz[st.session_state.visualizations_page - 1]
+
+if current_viz == 'bribe_amount':
+    # First visualization: Bribe Amount by Pool
     if bribe_col in pool_bribes.columns and not pool_bribes.empty:
         scatter_data = pool_bribes[pool_bribes[bribe_col] > 0].copy()
         if not scatter_data.empty:
@@ -1140,9 +1167,10 @@ with viz_col1:
                 plot_bgcolor='rgba(0,0,0,0)',
                 paper_bgcolor='rgba(0,0,0,0)',
                 font_color='white',
-                title=dict(font=dict(color='white', size=16)),
+                title=dict(font=dict(color='white', size=18)),
                 xaxis=dict(gridcolor='rgba(255,255,255,0.1)', tickangle=-45),
-                yaxis=dict(gridcolor='rgba(255,255,255,0.1)')
+                yaxis=dict(gridcolor='rgba(255,255,255,0.1)'),
+                height=500
             )
             st.plotly_chart(fig_scatter, use_container_width=True)
         else:
@@ -1150,8 +1178,8 @@ with viz_col1:
     else:
         st.info("Bribe data not available")
 
-with viz_col2:
-    # Use veBAL votes instead of votes_col for the scatter plot
+elif current_viz == 'bribes_votes':
+    # Second visualization: Bribes vs veBAL Votes
     if 'vebal_votes' in pool_bribes.columns and bribe_col in pool_bribes.columns and not pool_bribes.empty:
         votes_data = pool_bribes[
             (pool_bribes[bribe_col] > 0) & 
@@ -1179,9 +1207,10 @@ with viz_col2:
                     plot_bgcolor='rgba(0,0,0,0)',
                     paper_bgcolor='rgba(0,0,0,0)',
                     font_color='white',
-                    title=dict(font=dict(color='white', size=16)),
+                    title=dict(font=dict(color='white', size=18)),
                     xaxis=dict(gridcolor='rgba(255,255,255,0.1)'),
-                    yaxis=dict(gridcolor='rgba(255,255,255,0.1)')
+                    yaxis=dict(gridcolor='rgba(255,255,255,0.1)'),
+                    height=500
                 )
                 st.plotly_chart(fig_votes, use_container_width=True)
             else:
@@ -1191,7 +1220,8 @@ with viz_col2:
     else:
         st.info("Votes data not available")
 
-with viz_col3:
+elif current_viz == 'bribes_vebal':
+    # Third visualization: Bribes vs veBAL Votes (duplicate)
     if 'vebal_votes' in pool_bribes.columns and bribe_col in pool_bribes.columns and not pool_bribes.empty:
         vebal_scatter_data = pool_bribes[
             (pool_bribes[bribe_col] > 0) & 
@@ -1219,9 +1249,10 @@ with viz_col3:
                 plot_bgcolor='rgba(0,0,0,0)',
                 paper_bgcolor='rgba(0,0,0,0)',
                 font_color='white',
-                title=dict(font=dict(color='white', size=16)),
+                title=dict(font=dict(color='white', size=18)),
                 xaxis=dict(gridcolor='rgba(255,255,255,0.1)'),
-                yaxis=dict(gridcolor='rgba(255,255,255,0.1)')
+                yaxis=dict(gridcolor='rgba(255,255,255,0.1)'),
+                height=500
             )
             st.plotly_chart(fig_vebal_scatter, use_container_width=True)
         else:
@@ -1264,69 +1295,40 @@ for col in ['day', 'week_date', 'date', 'block_date', 'timestamp', 'week', 'peri
 if date_col:
     st.markdown("#### 📅 Bribe Timeline")
     if bribe_col in df_bribes_display.columns and not df_bribes_display.empty:
-        # Ensure date column is datetime
-        timeline_data = df_bribes_display.copy()
-        timeline_data[date_col] = pd.to_datetime(timeline_data[date_col], errors='coerce')
-        timeline_data = timeline_data[timeline_data[date_col].notna()]
-        
+        timeline_data = df_bribes_display.groupby([date_col, pool_col])[bribe_col].sum().reset_index()
         if not timeline_data.empty and len(timeline_data[pool_col].unique()) <= 20:
             # Show individual pools if not too many
-            timeline_grouped = timeline_data.groupby([date_col, pool_col])[bribe_col].sum().reset_index()
             fig_timeline = px.line(
-                timeline_grouped,
+                timeline_data,
                 x=date_col,
                 y=bribe_col,
                 color=pool_col,
                 title="💰 Bribe Amount Over Time by Pool",
-                labels={bribe_col: 'Bribes (USD)', date_col: 'Date', pool_col: 'Pool'},
-                markers=True
+                labels={bribe_col: 'Bribes (USD)', date_col: 'Date', pool_col: 'Pool'}
             )
         else:
             # Aggregate by date if too many pools
-            timeline_agg = timeline_data.groupby(date_col)[bribe_col].sum().reset_index()
+            timeline_agg = df_bribes_display.groupby(date_col)[bribe_col].sum().reset_index()
             fig_timeline = px.line(
                 timeline_agg,
                 x=date_col,
                 y=bribe_col,
                 title="💰 Total Bribes Over Time",
-                labels={bribe_col: 'Total Bribes (USD)', date_col: 'Date'},
-                markers=True
+                labels={bribe_col: 'Total Bribes (USD)', date_col: 'Date'}
             )
         
-        # Format x-axis to show only dates (no time, no UTC)
         fig_timeline.update_layout(
             plot_bgcolor='rgba(0,0,0,0)',
             paper_bgcolor='rgba(0,0,0,0)',
             font_color='white',
-            title=dict(font=dict(color='white', size=18)),
+            title=dict(font=dict(color='white', size=16)),
             xaxis=dict(
                 gridcolor='rgba(255,255,255,0.1)',
-                title='Date',
-                title_font=dict(size=12),
-                tickformat='%Y-%m-%d',  # Format: YYYY-MM-DD
-                dtick='D7',  # Show tick every 7 days
-                tickangle=-45
+                tickfont=dict(size=9)  # Smaller font size for x-axis labels
             ),
-            yaxis=dict(
-                gridcolor='rgba(255,255,255,0.1)',
-                title='Total Bribes (USD)',
-                title_font=dict(size=12)
-            ),
-            legend=dict(
-                bgcolor='rgba(0,0,0,0.5)',
-                font=dict(size=10)
-            ),
-            hovermode='x unified',
-            height=450
+            yaxis=dict(gridcolor='rgba(255,255,255,0.1)'),
+            legend=dict(bgcolor='rgba(0,0,0,0.5)')
         )
-        
-        # Update hover template to show only date
-        fig_timeline.update_traces(
-            hovertemplate='<b>%{fullData.name}</b><br>' +
-                         'Date: %{x|%Y-%m-%d}<br>' +
-                         'Bribes: $%{y:,.0f}<extra></extra>'
-        )
-        
         st.plotly_chart(fig_timeline, use_container_width=True)
 
 # Detailed Pool Analysis (only for 'all' mode - shows all pools)
