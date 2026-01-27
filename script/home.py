@@ -105,6 +105,13 @@ df = utils.load_data()
 if df.empty:
     st.stop()
 
+# Initialize session state - default to 'all' (show everything)
+if 'pool_filter_mode' not in st.session_state:
+    st.session_state.pool_filter_mode = 'all'  # Default: show all pools
+
+# Pool filters at the top of sidebar (FIRST - before any other sidebar content)
+utils.show_pool_filters('pool_filter_mode')
+
 df_sim = utils.run_simulation_sidebar(df)
 
 # Header with logout button
@@ -115,12 +122,7 @@ with col_title:
 with col_logout:
     utils.show_logout_button()
 
-# Pool filters at the top of sidebar
-utils.show_pool_filters('pool_filter_mode')
-
-# Initialize session state - default to 'all' (show everything)
-if 'pool_filter_mode' not in st.session_state:
-    st.session_state.pool_filter_mode = 'all'  # Default: show all pools
+st.markdown("---")
 
 # Filter data based on mode
 if st.session_state.pool_filter_mode == 'top20':
