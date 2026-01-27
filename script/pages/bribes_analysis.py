@@ -1192,7 +1192,7 @@ if current_viz == 'bribe_ranking':
         st.info("Bribe data not available")
 
 elif current_viz == 'bribes_votes_lollipop':
-    # Second visualization: Bribes vs veBAL Votes (Scatter with Linear Regression)
+    # Second visualization: Bribes vs veBAL Votes (Dual-Axis Chart)
     if 'vebal_votes' in pool_bribes.columns and bribe_col in pool_bribes.columns and not pool_bribes.empty:
         votes_data = pool_bribes[
             (pool_bribes[bribe_col] > 0) & 
@@ -1204,119 +1204,81 @@ elif current_viz == 'bribes_votes_lollipop':
             votes_data['vebal_votes'] = pd.to_numeric(votes_data['vebal_votes'], errors='coerce')
             votes_data = votes_data[votes_data['vebal_votes'].notna() & (votes_data['vebal_votes'] > 0)]
             if not votes_data.empty:
-                # Prepare data for regression
-                x_data = votes_data[bribe_col].values
-                y_data = votes_data['vebal_votes'].values
+                # Sort by total_bribes_usd in descending order
+                votes_data = votes_data.sort_values(bribe_col, ascending=False).reset_index(drop=True)
                 
-                # Calculate linear regression (y = mx + b)
-                coeffs = np.polyfit(x_data, y_data, 1)
-                slope = coeffs[0]
-                intercept = coeffs[1]
+                # Get top pools for readability (top 20 or all if less than 20)
+                display_data = votes_data.head(20) if len(votes_data) > 20 else votes_data
                 
-                # Generate regression line points
-                x_line = np.linspace(x_data.min(), x_data.max(), 100)
-                y_line = slope * x_line + intercept
-                
-                # Calculate residuals (distance from point to regression line)
-                y_predicted = slope * x_data + intercept
-                residuals = y_data - y_predicted
-                
-                # Add efficiency column to dataframe
-                votes_data = votes_data.copy()
-                votes_data['residual'] = residuals
-                votes_data['efficiency'] = votes_data['residual'].apply(lambda x: 'High Efficiency (Organic Votes)' if x > 0 else 'Low Efficiency (Overpaying)')
-                votes_data['efficiency_color'] = votes_data['residual'].apply(lambda x: '#2d8659' if x > 0 else '#d32f2f')
-                
-                # Create scatter plot
+                # Create dual-axis chart
                 fig = go.Figure()
                 
-                # Add regression line (Fair Price line)
-                fig.add_trace(go.Scatter(
-                    x=x_line,
-                    y=y_line,
-                    mode='lines',
-                    name='Fair Price (Linear Regression)',
-                    line=dict(color='rgba(255, 255, 255, 0.6)', width=3, dash='dash'),
-                    hovertemplate='Fair Price Line<br>Bribes: $%{x:,.0f}<br>Expected Votes: %{y:,.0f}<extra></extra>'
+                # Add bars for total_bribes_usd (Primary Y-axis, left)
+                fig.add_trace(go.Bar(
+                    x=display_data[pool_col],
+                    y=display_data[bribe_col],
+                    name='Total Bribes (USD)',
+                    marker_color='#4a90e2',  # Professional blue
+                    yaxis='y',
+                    hovertemplate='<b>%{x}</b><br>Total Bribes: $%{y:,.0f}<extra></extra>',
+                    text=display_data[bribe_col],
+                    texttemplate='$%{text:,.0f}',
+                    textposition='outside'
                 ))
                 
-                # Add scatter points - separate traces for high and low efficiency
-                high_eff = votes_data[votes_data['residual'] > 0]
-                low_eff = votes_data[votes_data['residual'] <= 0]
-                
-                # High efficiency points (green)
-                if not high_eff.empty:
-                    fig.add_trace(go.Scatter(
-                        x=high_eff[bribe_col],
-                        y=high_eff['vebal_votes'],
-                        mode='markers',
-                        name='High Efficiency (Organic Votes)',
-                        marker=dict(
-                            size=10,
-                            color='#2d8659',
-                            line=dict(width=1, color='white'),
-                            opacity=0.8
-                        ),
-                        text=high_eff[pool_col],
-                        hovertemplate='<b>%{text}</b><br>' +
-                                    'Total Bribes: $%{x:,.0f}<br>' +
-                                    'veBAL Votes: %{y:,.0f}<br>' +
-                                    'Efficiency: High (Above Fair Price)<br>' +
-                                    'Residual: %{customdata:,.0f}<extra></extra>',
-                        customdata=high_eff['residual']
-                    ))
-                
-                # Low efficiency points (red)
-                if not low_eff.empty:
-                    fig.add_trace(go.Scatter(
-                        x=low_eff[bribe_col],
-                        y=low_eff['vebal_votes'],
-                        mode='markers',
-                        name='Low Efficiency (Overpaying)',
-                        marker=dict(
-                            size=10,
-                            color='#d32f2f',
-                            line=dict(width=1, color='white'),
-                            opacity=0.8
-                        ),
-                        text=low_eff[pool_col],
-                        hovertemplate='<b>%{text}</b><br>' +
-                                    'Total Bribes: $%{x:,.0f}<br>' +
-                                    'veBAL Votes: %{y:,.0f}<br>' +
-                                    'Efficiency: Low (Below Fair Price)<br>' +
-                                    'Residual: %{customdata:,.0f}<extra></extra>',
-                        customdata=low_eff['residual']
-                    ))
+                # Add line with markers for vebal_votes (Secondary Y-axis, right)
+                fig.add_trace(go.Scatter(
+                    x=display_data[pool_col],
+                    y=display_data['vebal_votes'],
+                    mode='lines+markers',
+                    name='veBAL Votes',
+                    line=dict(color='#7b8a9a', width=3),
+                    marker=dict(
+                        size=8,
+                        color='#7b8a9a',
+                        line=dict(width=1, color='white')
+                    ),
+                    yaxis='y2',
+                    hovertemplate='<b>%{x}</b><br>veBAL Votes: %{y:,.0f}<extra></extra>'
+                ))
                 
                 fig.update_layout(
                     plot_bgcolor='rgba(0,0,0,0)',
                     paper_bgcolor='rgba(0,0,0,0)',
                     font_color='white',
-                    title=dict(text="📊 Bribes vs veBAL Votes: Efficiency Analysis", font=dict(color='white', size=18)),
+                    title=dict(text="📊 Bribes vs veBAL Votes: Dual-Axis Comparison", font=dict(color='white', size=18)),
                     xaxis=dict(
                         gridcolor='rgba(255,255,255,0.1)',
-                        title='Total Bribes (USD)',
-                        tickformat='$,.0f'
+                        title='',
+                        tickangle=-45,
+                        showgrid=False
                     ),
                     yaxis=dict(
                         gridcolor='rgba(255,255,255,0.1)',
-                        title='veBAL Votes',
-                        tickformat=',.0f'
+                        title=dict(text='Total Bribes (USD)', font=dict(color='#4a90e2')),
+                        tickfont=dict(color='#4a90e2'),
+                        side='left'
+                    ),
+                    yaxis2=dict(
+                        title=dict(text='veBAL Votes', font=dict(color='#7b8a9a')),
+                        overlaying='y',
+                        side='right',
+                        tickfont=dict(color='#7b8a9a'),
+                        gridcolor='rgba(255,255,255,0.05)'
                     ),
                     height=600,
-                    hovermode='closest',
+                    hovermode='x unified',
                     legend=dict(
                         bgcolor='rgba(0,0,0,0.5)',
                         font=dict(color='white'),
-                        yanchor='top',
-                        y=0.99,
-                        xanchor='left',
-                        x=0.01
-                    )
+                        orientation='h',
+                        yanchor='bottom',
+                        y=1.02,
+                        xanchor='right',
+                        x=1
+                    ),
+                    barmode='group'
                 )
-                
-                # Add info box explaining the chart
-                st.info("💡 **Efficiency Analysis**: Points above the regression line (green) indicate high efficiency/organic votes. Points below (red) indicate low efficiency/overpaying for votes. The dashed line represents the market's 'Fair Price' for votes.")
                 
                 st.plotly_chart(fig, use_container_width=True)
             else:
