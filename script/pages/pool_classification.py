@@ -101,49 +101,12 @@ if df.empty:
     st.error("❌ Unable to load data.")
     st.stop()
 
-st.sidebar.markdown("---")
-st.sidebar.markdown("### 🔍 Pool Selection")
-
 # Initialize session state - default to 'all' (show everything)
 if 'pool_filter_mode_class' not in st.session_state:
     st.session_state.pool_filter_mode_class = 'all'  # Default: show all pools
 
-col_btn1, col_btn2 = st.sidebar.columns(2)
-
-with col_btn1:
-    if st.button("Top 20", key="btn_top20_class"):
-        st.session_state.pool_filter_mode_class = 'top20'
-        st.rerun()
-
-with col_btn2:
-    if st.button("Worst 20", key="btn_worst20_class"):
-        st.session_state.pool_filter_mode_class = 'worst20'
-        st.rerun()
-
-# Show "Select All" button only when a filter is active (top20 or worst20)
-if st.session_state.pool_filter_mode_class in ['top20', 'worst20']:
-    if st.sidebar.button("Select All", key="btn_select_all_class"):
-        st.session_state.pool_filter_mode_class = 'all'
-        st.rerun()
-
-# Filter data based on mode
-if st.session_state.pool_filter_mode_class == 'top20':
-    # Get top 20 pools
-    top_pools = utils.get_top_pools(df, n=20)
-    top_pools_list = [str(p) for p in top_pools]
-    df_display = df[df['pool_symbol'].isin(top_pools_list)].copy()
-    st.info(f"📊 Showing analysis for Top 20 Pools ({len(top_pools_list)} pools)")
-elif st.session_state.pool_filter_mode_class == 'worst20':
-    # Get worst 20 pools
-    worst_pools = utils.get_worst_pools(df, n=20)
-    worst_pools_list = [str(p) for p in worst_pools]
-    df_display = df[df['pool_symbol'].isin(worst_pools_list)].copy()
-    st.info(f"📊 Showing analysis for Worst 20 Pools ({len(worst_pools_list)} pools)")
-else:
-    # 'all' mode - show everything
-    df_display = df.copy()
-    total_pools = len(df['pool_symbol'].unique()) if 'pool_symbol' in df.columns else 0
-    st.info(f"📊 Showing analysis for all pools ({total_pools} pools)")
+# Pool filters at the top of sidebar
+utils.show_pool_filters('pool_filter_mode_class')
 
 # Page Header with logout button
 col_title, col_logout = st.columns([1, 0.1])
@@ -154,6 +117,21 @@ with col_logout:
     utils.show_logout_button()
 
 st.markdown("---")
+
+# Filter data based on mode
+if st.session_state.pool_filter_mode_class == 'top20':
+    # Get top 20 pools
+    top_pools = utils.get_top_pools(df, n=20)
+    top_pools_list = [str(p) for p in top_pools]
+    df_display = df[df['pool_symbol'].isin(top_pools_list)].copy()
+elif st.session_state.pool_filter_mode_class == 'worst20':
+    # Get worst 20 pools
+    worst_pools = utils.get_worst_pools(df, n=20)
+    worst_pools_list = [str(p) for p in worst_pools]
+    df_display = df[df['pool_symbol'].isin(worst_pools_list)].copy()
+else:
+    # 'all' mode - show everything
+    df_display = df.copy()
 
 if 'pool_category' not in df_display.columns:
     st.error("Pool classification not found.")

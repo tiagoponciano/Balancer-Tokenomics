@@ -1225,6 +1225,46 @@ def show_logout_button():
         st.session_state.authenticated = False
         st.rerun()
 
+def show_pool_filters(session_key='pool_filter_mode', on_change_callback=None):
+    """
+    Display pool filter buttons at the top of the sidebar
+    
+    Args:
+        session_key: Session state key for storing filter mode (default: 'pool_filter_mode')
+        on_change_callback: Optional callback function to call when filter changes
+    """
+    # Initialize session state
+    if session_key not in st.session_state:
+        st.session_state[session_key] = 'all'
+    
+    # Create filter container at the top of sidebar
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### 🔍 Pool Selection")
+    
+    col_btn1, col_btn2 = st.sidebar.columns(2)
+    
+    with col_btn1:
+        if st.button("Top 20", key=f"btn_top20_{session_key}"):
+            st.session_state[session_key] = 'top20'
+            if on_change_callback:
+                on_change_callback()
+            st.rerun()
+    
+    with col_btn2:
+        if st.button("Worst 20", key=f"btn_worst20_{session_key}"):
+            st.session_state[session_key] = 'worst20'
+            if on_change_callback:
+                on_change_callback()
+            st.rerun()
+    
+    # Show "Select All" button only when a filter is active
+    if st.session_state[session_key] in ['top20', 'worst20']:
+        if st.sidebar.button("Select All", key=f"btn_select_all_{session_key}"):
+            st.session_state[session_key] = 'all'
+            if on_change_callback:
+                on_change_callback()
+            st.rerun()
+
 @st.cache_data
 def load_data():
     """Load main financial data from Supabase Storage or local filesystem"""
@@ -1554,6 +1594,12 @@ def load_bribes_data():
             date_cols = ['date', 'block_date', 'timestamp', 'week', 'period']
             for col in date_cols:
                 if col in df_bribes.columns:
+                    # Clean date strings: remove time and UTC suffix, keep only YYYY-MM-DD
+                    df_bribes[col] = df_bribes[col].astype(str).str.replace(r'\s+\d{2}:\d{2}:\d{2}\.\d+\s+UTC', '', regex=True)
+                    df_bribes[col] = df_bribes[col].astype(str).str.replace(r'\s+\d{2}:\d{2}:\d{2}\s+UTC', '', regex=True)
+                    df_bribes[col] = df_bribes[col].astype(str).str.replace(r'\s+UTC', '', regex=True)
+                    df_bribes[col] = df_bribes[col].astype(str).str.strip()
+                    # Convert to datetime
                     df_bribes[col] = pd.to_datetime(df_bribes[col], errors='coerce')
             
             numeric_cols = [
@@ -1603,6 +1649,12 @@ def load_bribes_data():
         date_cols = ['date', 'block_date', 'timestamp', 'week', 'period']
         for col in date_cols:
             if col in df_bribes.columns:
+                # Clean date strings: remove time and UTC suffix, keep only YYYY-MM-DD
+                df_bribes[col] = df_bribes[col].astype(str).str.replace(r'\s+\d{2}:\d{2}:\d{2}\.\d+\s+UTC', '', regex=True)
+                df_bribes[col] = df_bribes[col].astype(str).str.replace(r'\s+\d{2}:\d{2}:\d{2}\s+UTC', '', regex=True)
+                df_bribes[col] = df_bribes[col].astype(str).str.replace(r'\s+UTC', '', regex=True)
+                df_bribes[col] = df_bribes[col].astype(str).str.strip()
+                # Convert to datetime
                 df_bribes[col] = pd.to_datetime(df_bribes[col], errors='coerce')
         
         # Convert numeric columns

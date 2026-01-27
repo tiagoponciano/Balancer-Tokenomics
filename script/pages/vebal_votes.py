@@ -133,31 +133,9 @@ df_votes['gauge_address'] = df_votes['gauge'].apply(extract_gauge_address)
 # Load main data for pool filtering
 df = utils.load_data()
 
-# Sidebar filters
-st.sidebar.markdown("---")
-st.sidebar.markdown("### 🔍 Pool Selection")
-
 # Initialize session state - default to 'all' (show everything)
 if 'pool_filter_mode_votes' not in st.session_state:
     st.session_state.pool_filter_mode_votes = 'all'  # Default: show all pools
-
-col_btn1, col_btn2 = st.sidebar.columns(2)
-
-with col_btn1:
-    if st.button("Top 20", key="btn_top20_votes"):
-        st.session_state.pool_filter_mode_votes = 'top20'
-        st.rerun()
-
-with col_btn2:
-    if st.button("Worst 20", key="btn_worst20_votes"):
-        st.session_state.pool_filter_mode_votes = 'worst20'
-        st.rerun()
-
-# Show "Select All" button only when a filter is active (top20 or worst20)
-if st.session_state.pool_filter_mode_votes in ['top20', 'worst20']:
-    if st.sidebar.button("Select All", key="btn_select_all_votes"):
-        st.session_state.pool_filter_mode_votes = 'all'
-        st.rerun()
 
 # Helper function to load aggregated CSV (same as bribes_analysis.py)
 # Use load_aggregated_csv from utils (supports Supabase)
@@ -229,6 +207,9 @@ else:
     # 'all' mode - show everything
     total_gauges = len(df_display)
     st.info(f"📊 Showing analysis for all gauges ({total_gauges} gauges)")
+
+# Pool filters at the top of sidebar
+utils.show_pool_filters('pool_filter_mode_votes')
 
 # Page Header with logout button
 col_title, col_logout = st.columns([1, 0.1])

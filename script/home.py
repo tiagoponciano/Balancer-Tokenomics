@@ -105,6 +105,13 @@ df = utils.load_data()
 if df.empty:
     st.stop()
 
+# Initialize session state - default to 'all' (show everything)
+if 'pool_filter_mode' not in st.session_state:
+    st.session_state.pool_filter_mode = 'all'  # Default: show all pools
+
+# Pool filters at the top of sidebar (FIRST - before any other sidebar content)
+utils.show_pool_filters('pool_filter_mode')
+
 df_sim = utils.run_simulation_sidebar(df)
 
 # Header with logout button
@@ -116,31 +123,6 @@ with col_logout:
     utils.show_logout_button()
 
 st.markdown("---")
-
-st.sidebar.markdown("---")
-st.sidebar.markdown("### 🔍 Pool Selection")
-
-# Initialize session state - default to 'all' (show everything)
-if 'pool_filter_mode' not in st.session_state:
-    st.session_state.pool_filter_mode = 'all'  # Default: show all pools
-
-col_btn1, col_btn2 = st.sidebar.columns(2)
-
-with col_btn1:
-    if st.button("Top 20", key="btn_top20"):
-        st.session_state.pool_filter_mode = 'top20'
-        st.rerun()
-
-with col_btn2:
-    if st.button("Worst 20", key="btn_worst20"):
-        st.session_state.pool_filter_mode = 'worst20'
-        st.rerun()
-
-# Show "Select All" button only when a filter is active (top20 or worst20)
-if st.session_state.pool_filter_mode in ['top20', 'worst20']:
-    if st.sidebar.button("Select All", key="btn_select_all"):
-        st.session_state.pool_filter_mode = 'all'
-        st.rerun()
 
 # Filter data based on mode
 if st.session_state.pool_filter_mode == 'top20':

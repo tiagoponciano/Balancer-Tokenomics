@@ -2,6 +2,7 @@ import streamlit as st
 import utils
 import plotly.graph_objects as go
 import plotly.express as px
+from plotly.subplots import make_subplots
 import pandas as pd
 import numpy as np
 from datetime import datetime
@@ -97,34 +98,15 @@ except Exception as e:
     st.code(traceback.format_exc())
     st.stop()
 
-# Sidebar - Pool Selection
-st.sidebar.markdown("---")
-st.sidebar.markdown("### 🔍 Pool Selection")
-
 # Initialize session state
 if 'pool_filter_mode_bribes' not in st.session_state:
     st.session_state.pool_filter_mode_bribes = 'all'  # Default: show all pools
 if 'show_performance_by_pool' not in st.session_state:
     st.session_state.show_performance_by_pool = False
-
-col_btn1, col_btn2 = st.sidebar.columns(2)
-with col_btn1:
-    if st.button("Top 20", key="btn_top20_bribes"):
-        st.session_state.pool_filter_mode_bribes = 'top20'
-        st.session_state.show_performance_by_pool = False
-        st.rerun()
-with col_btn2:
-    if st.button("Worst 20", key="btn_worst20_bribes"):
-        st.session_state.pool_filter_mode_bribes = 'worst20'
-        st.session_state.show_performance_by_pool = False
-        st.rerun()
-
-# Show "Select All" button only when a filter is active (top20 or worst20)
-if st.session_state.pool_filter_mode_bribes in ['top20', 'worst20']:
-    if st.sidebar.button("Select All", key="btn_select_all_bribes"):
-        st.session_state.pool_filter_mode_bribes = 'all'
-        st.session_state.show_performance_by_pool = False
-        st.rerun()
+if 'performance_page' not in st.session_state:
+    st.session_state.performance_page = 1
+if 'detailed_analysis_page' not in st.session_state:
+    st.session_state.detailed_analysis_page = 1
 
 components.html("""
 <script>
@@ -478,6 +460,15 @@ else:
     
     total_bribes_pools = len(df_bribes_display[pool_match_col].unique()) if pool_match_col and not df_bribes_display.empty else 0
     st.info(f"📊 Showing analysis for all pools ({total_bribes_pools} pools in bribes data)")
+
+# Pool filters at the top of sidebar
+def reset_performance_view():
+    """Reset performance view when filter changes"""
+    st.session_state.show_performance_by_pool = False
+    st.session_state.performance_page = 1
+    st.session_state.detailed_analysis_page = 1
+
+utils.show_pool_filters('pool_filter_mode_bribes', on_change_callback=reset_performance_view)
 
 # Page Header with logout button
 col_title, col_logout = st.columns([1, 0.1])
@@ -891,30 +882,31 @@ with tab3:
         )
         st.dataframe(display_df, use_container_width=True, hide_index=True)
         
-        # Add visualization if there's data
-        vebal_with_data = ranking_df[ranking_df['veBAL Votes'] > 0]
-        if not vebal_with_data.empty:
-            st.markdown("#### 📊 Top Pools by veBAL Votes")
-            top_10_vebal = vebal_with_data.nlargest(10, 'veBAL Votes')
-            fig_vebal = px.bar(
-                top_10_vebal,
-                x='pool',
-                y='veBAL Votes',
-                title="Top Pools by veBAL Votes",
-                labels={'veBAL Votes': 'veBAL Votes', 'pool': 'Pool'},
-                color='veBAL Votes',
-                color_continuous_scale='Blues'
-            )
-            fig_vebal.update_layout(
-                plot_bgcolor='rgba(0,0,0,0)',
-                paper_bgcolor='rgba(0,0,0,0)',
-                font_color='white',
-                title=dict(font=dict(color='white', size=16)),
-                xaxis=dict(gridcolor='rgba(255,255,255,0.1)', tickangle=-45),
-                yaxis=dict(gridcolor='rgba(255,255,255,0.1)'),
-                showlegend=False
-            )
-            st.plotly_chart(fig_vebal, use_container_width=True)
+        # Add visualization if there's data (only show when "Select All" is active)
+        if st.session_state.pool_filter_mode_bribes == 'all':
+            vebal_with_data = ranking_df[ranking_df['veBAL Votes'] > 0]
+            if not vebal_with_data.empty:
+                st.markdown("#### 📊 Top Pools by veBAL Votes")
+                top_10_vebal = vebal_with_data.nlargest(10, 'veBAL Votes')
+                fig_vebal = px.bar(
+                    top_10_vebal,
+                    x='pool',
+                    y='veBAL Votes',
+                    title="Top Pools by veBAL Votes",
+                    labels={'veBAL Votes': 'veBAL Votes', 'pool': 'Pool'},
+                    color='veBAL Votes',
+                    color_continuous_scale='Blues'
+                )
+                fig_vebal.update_layout(
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    font_color='white',
+                    title=dict(font=dict(color='white', size=16)),
+                    xaxis=dict(gridcolor='rgba(255,255,255,0.1)', tickangle=-45),
+                    yaxis=dict(gridcolor='rgba(255,255,255,0.1)'),
+                    showlegend=False
+                )
+                st.plotly_chart(fig_vebal, use_container_width=True)
     elif 'vebal_votes' in pool_bribes.columns:
         # Fallback: show from pool_bribes
         vebal_data = pool_bribes[pool_bribes['vebal_votes'].notna() & (pool_bribes['vebal_votes'] > 0)].copy()
@@ -926,28 +918,29 @@ with tab3:
             top_vebal['Ranking'] = top_vebal['Ranking'].apply(lambda x: f"#{int(x)}" if pd.notna(x) else "N/A")
             st.dataframe(top_vebal, use_container_width=True, hide_index=True)
             
-            # Add visualization
-            st.markdown("#### 📊 Top Pools by veBAL Votes")
-            top_10_vebal = vebal_data.nlargest(10, 'vebal_votes')
-            fig_vebal = px.bar(
-                top_10_vebal,
-                x=pool_col,
-                y='vebal_votes',
-                title="Top Pools by veBAL Votes",
-                labels={'vebal_votes': 'veBAL Votes', pool_col: 'Pool'},
-                color='vebal_votes',
-                color_continuous_scale='Blues'
-            )
-            fig_vebal.update_layout(
-                plot_bgcolor='rgba(0,0,0,0)',
-                paper_bgcolor='rgba(0,0,0,0)',
-                font_color='white',
-                title=dict(font=dict(color='white', size=16)),
-                xaxis=dict(gridcolor='rgba(255,255,255,0.1)', tickangle=-45),
-                yaxis=dict(gridcolor='rgba(255,255,255,0.1)'),
-                showlegend=False
-            )
-            st.plotly_chart(fig_vebal, use_container_width=True)
+            # Add visualization (only show when "Select All" is active)
+            if st.session_state.pool_filter_mode_bribes == 'all':
+                st.markdown("#### 📊 Top Pools by veBAL Votes")
+                top_10_vebal = vebal_data.nlargest(10, 'vebal_votes')
+                fig_vebal = px.bar(
+                    top_10_vebal,
+                    x=pool_col,
+                    y='vebal_votes',
+                    title="Top Pools by veBAL Votes",
+                    labels={'vebal_votes': 'veBAL Votes', pool_col: 'Pool'},
+                    color='vebal_votes',
+                    color_continuous_scale='Blues'
+                )
+                fig_vebal.update_layout(
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    font_color='white',
+                    title=dict(font=dict(color='white', size=16)),
+                    xaxis=dict(gridcolor='rgba(255,255,255,0.1)', tickangle=-45),
+                    yaxis=dict(gridcolor='rgba(255,255,255,0.1)'),
+                    showlegend=False
+                )
+                st.plotly_chart(fig_vebal, use_container_width=True)
         else:
             st.info("No veBAL votes data available for the selected pools")
     else:
@@ -1007,7 +1000,39 @@ if st.session_state.show_performance_by_pool:
     elif st.session_state.pool_filter_mode_bribes == 'worst20':
         csv_data = load_aggregated_csv('worst20_pools_bribes_aggregated.csv')
     
-    for pool in category_pools:
+    # Pagination for "all" mode (when there are many pools)
+    items_per_page = 10
+    total_pools = len(category_pools)
+    
+    if st.session_state.pool_filter_mode_bribes == 'all' and total_pools > items_per_page:
+        # Pagination controls
+        total_pages = (total_pools + items_per_page - 1) // items_per_page
+        
+        pag_col1, pag_col2, pag_col3, pag_col4 = st.columns([0.2, 0.2, 0.2, 0.4])
+        with pag_col1:
+            if st.button("◀ Previous", disabled=(st.session_state.performance_page <= 1), key="prev_page_bribes"):
+                st.session_state.performance_page = max(1, st.session_state.performance_page - 1)
+                st.rerun()
+        with pag_col2:
+            if st.button("Next ▶", disabled=(st.session_state.performance_page >= total_pages), key="next_page_bribes"):
+                st.session_state.performance_page = min(total_pages, st.session_state.performance_page + 1)
+                st.rerun()
+        with pag_col3:
+            st.write(f"Page {st.session_state.performance_page} of {total_pages}")
+        with pag_col4:
+            st.write(f"Showing {((st.session_state.performance_page - 1) * items_per_page) + 1}-{min(st.session_state.performance_page * items_per_page, total_pools)} of {total_pools} pools")
+        
+        # Calculate pagination range
+        start_idx = (st.session_state.performance_page - 1) * items_per_page
+        end_idx = start_idx + items_per_page
+        paginated_pools = category_pools[start_idx:end_idx]
+    else:
+        # No pagination needed for top20/worst20 or when there are few pools
+        paginated_pools = category_pools
+        if st.session_state.pool_filter_mode_bribes == 'all':
+            st.info(f"Showing all {total_pools} pools")
+    
+    for pool in paginated_pools:
         # Try to match pool from category_pools with df_bribes_display
         pool_bribe_data = pd.DataFrame()
         
@@ -1096,41 +1121,8 @@ st.markdown("---")
 # Visualizations
 st.markdown("### 📈 Visualizations")
 
-viz_col1, viz_col2, viz_col3 = st.columns(3)
-
-with viz_col1:
-    if bribe_col in pool_bribes.columns and not pool_bribes.empty:
-        scatter_data = pool_bribes[pool_bribes[bribe_col] > 0].copy()
-        if not scatter_data.empty:
-            fig_scatter = px.scatter(
-                scatter_data,
-                x=pool_col,
-                y=bribe_col,
-                hover_data=[pool_col],
-                title="💰 Bribe Amount by Pool",
-                labels={bribe_col: 'Total Bribes (USD)', pool_col: 'Pool'},
-                color=bribe_col,
-                color_continuous_scale='Viridis',
-                size=bribe_col,
-                size_max=20
-            )
-            fig_scatter.update_layout(
-                plot_bgcolor='rgba(0,0,0,0)',
-                paper_bgcolor='rgba(0,0,0,0)',
-                font_color='white',
-                title=dict(font=dict(color='white', size=16)),
-                xaxis=dict(gridcolor='rgba(255,255,255,0.1)', tickangle=-45),
-                yaxis=dict(gridcolor='rgba(255,255,255,0.1)')
-            )
-            st.plotly_chart(fig_scatter, use_container_width=True)
-        else:
-            st.info("No data available for scatter plot")
-    else:
-        st.info("Bribe data not available")
-
-with viz_col2:
-    # Use veBAL votes instead of votes_col for the scatter plot
-    if 'vebal_votes' in pool_bribes.columns and bribe_col in pool_bribes.columns and not pool_bribes.empty:
+# Single visualization: Bribes vs veBAL Votes (Dual-Axis Chart)
+if 'vebal_votes' in pool_bribes.columns and bribe_col in pool_bribes.columns and not pool_bribes.empty:
         votes_data = pool_bribes[
             (pool_bribes[bribe_col] > 0) & 
             (pool_bribes['vebal_votes'].notna()) & 
@@ -1141,71 +1133,89 @@ with viz_col2:
             votes_data['vebal_votes'] = pd.to_numeric(votes_data['vebal_votes'], errors='coerce')
             votes_data = votes_data[votes_data['vebal_votes'].notna() & (votes_data['vebal_votes'] > 0)]
             if not votes_data.empty:
-                fig_votes = px.scatter(
-                    votes_data,
-                    x=bribe_col,
-                    y='vebal_votes',
-                    hover_data=[pool_col],
-                    title="📊 Bribes vs veBAL Votes",
-                    labels={bribe_col: 'Total Bribes (USD)', 'vebal_votes': 'veBAL Votes'},
-                    color='vebal_votes',
-                    color_continuous_scale='Blues',
-                    size='vebal_votes',
-                    size_max=20
-                )
-                fig_votes.update_layout(
+                # Sort by total_bribes_usd in descending order
+                votes_data = votes_data.sort_values(bribe_col, ascending=False).reset_index(drop=True)
+                
+                # Get top pools for readability (top 20 or all if less than 20)
+                display_data = votes_data.head(20) if len(votes_data) > 20 else votes_data
+                
+                # Create dual-axis chart
+                fig = go.Figure()
+                
+                # Add bars for total_bribes_usd (Primary Y-axis, left)
+                fig.add_trace(go.Bar(
+                    x=display_data[pool_col],
+                    y=display_data[bribe_col],
+                    name='Total Bribes (USD)',
+                    marker_color='#4a90e2',  # Professional blue
+                    yaxis='y',
+                    hovertemplate='<b>%{x}</b><br>Total Bribes: $%{y:,.0f}<extra></extra>',
+                    text=display_data[bribe_col],
+                    texttemplate='$%{text:,.0f}',
+                    textposition='outside'
+                ))
+                
+                # Add line with markers for vebal_votes (Secondary Y-axis, right)
+                fig.add_trace(go.Scatter(
+                    x=display_data[pool_col],
+                    y=display_data['vebal_votes'],
+                    mode='lines+markers',
+                    name='veBAL Votes',
+                    line=dict(color='#7b8a9a', width=3),
+                    marker=dict(
+                        size=8,
+                        color='#7b8a9a',
+                        line=dict(width=1, color='white')
+                    ),
+                    yaxis='y2',
+                    hovertemplate='<b>%{x}</b><br>veBAL Votes: %{y:,.0f}<extra></extra>'
+                ))
+                
+                fig.update_layout(
                     plot_bgcolor='rgba(0,0,0,0)',
                     paper_bgcolor='rgba(0,0,0,0)',
                     font_color='white',
-                    title=dict(font=dict(color='white', size=16)),
-                    xaxis=dict(gridcolor='rgba(255,255,255,0.1)'),
-                    yaxis=dict(gridcolor='rgba(255,255,255,0.1)')
+                    title=dict(text="📊 Bribes vs veBAL Votes: Dual-Axis Comparison", font=dict(color='white', size=18)),
+                    xaxis=dict(
+                        gridcolor='rgba(255,255,255,0.1)',
+                        title='',
+                        tickangle=-45,
+                        showgrid=False
+                    ),
+                    yaxis=dict(
+                        gridcolor='rgba(255,255,255,0.1)',
+                        title=dict(text='Total Bribes (USD)', font=dict(color='#4a90e2')),
+                        tickfont=dict(color='#4a90e2'),
+                        side='left'
+                    ),
+                    yaxis2=dict(
+                        title=dict(text='veBAL Votes', font=dict(color='#7b8a9a')),
+                        overlaying='y',
+                        side='right',
+                        tickfont=dict(color='#7b8a9a'),
+                        gridcolor='rgba(255,255,255,0.05)'
+                    ),
+                    height=600,
+                    hovermode='x unified',
+                    legend=dict(
+                        bgcolor='rgba(0,0,0,0.5)',
+                        font=dict(color='white'),
+                        orientation='h',
+                        yanchor='bottom',
+                        y=1.02,
+                        xanchor='right',
+                        x=1
+                    ),
+                    barmode='group'
                 )
-                st.plotly_chart(fig_votes, use_container_width=True)
+                
+                st.plotly_chart(fig, use_container_width=True)
             else:
-                st.info("No data available for votes scatter plot")
+                st.info("No data available for votes visualization")
         else:
-            st.info("No data available for votes scatter plot")
-    else:
-        st.info("Votes data not available")
-
-with viz_col3:
-    if 'vebal_votes' in pool_bribes.columns and bribe_col in pool_bribes.columns and not pool_bribes.empty:
-        vebal_scatter_data = pool_bribes[
-            (pool_bribes[bribe_col] > 0) & 
-            (pool_bribes['vebal_votes'].notna()) & 
-            (pool_bribes['vebal_votes'] > 0)
-        ]
-        if not vebal_scatter_data.empty:
-            fig_vebal_scatter = px.scatter(
-                vebal_scatter_data,
-                x=bribe_col,
-                y='vebal_votes',
-                hover_data=[pool_col, 'vebal_pct_votes'],
-                title="🗳️ Bribes vs veBAL Votes",
-                labels={
-                    bribe_col: 'Total Bribes (USD)', 
-                    'vebal_votes': 'veBAL Votes',
-                    'vebal_pct_votes': 'Vote Share %'
-                },
-                color='vebal_votes',
-                color_continuous_scale='Greens',
-                size='vebal_votes',
-                size_max=20
-            )
-            fig_vebal_scatter.update_layout(
-                plot_bgcolor='rgba(0,0,0,0)',
-                paper_bgcolor='rgba(0,0,0,0)',
-                font_color='white',
-                title=dict(font=dict(color='white', size=16)),
-                xaxis=dict(gridcolor='rgba(255,255,255,0.1)'),
-                yaxis=dict(gridcolor='rgba(255,255,255,0.1)')
-            )
-            st.plotly_chart(fig_vebal_scatter, use_container_width=True)
-        else:
-            st.info("No data available for veBAL votes visualization")
-    else:
-        st.info("veBAL votes data not available")
+            st.info("No data available for votes visualization")
+else:
+    st.info("Votes data not available")
 
 # Top pools bar chart
 st.markdown("---")
@@ -1242,38 +1252,60 @@ for col in ['day', 'week_date', 'date', 'block_date', 'timestamp', 'week', 'peri
 if date_col:
     st.markdown("#### 📅 Bribe Timeline")
     if bribe_col in df_bribes_display.columns and not df_bribes_display.empty:
-        timeline_data = df_bribes_display.groupby([date_col, pool_col])[bribe_col].sum().reset_index()
-        if not timeline_data.empty and len(timeline_data[pool_col].unique()) <= 20:
-            # Show individual pools if not too many
-            fig_timeline = px.line(
-                timeline_data,
-                x=date_col,
-                y=bribe_col,
-                color=pool_col,
-                title="💰 Bribe Amount Over Time by Pool",
-                labels={bribe_col: 'Bribes (USD)', date_col: 'Date', pool_col: 'Pool'}
-            )
-        else:
-            # Aggregate by date if too many pools
-            timeline_agg = df_bribes_display.groupby(date_col)[bribe_col].sum().reset_index()
-            fig_timeline = px.line(
-                timeline_agg,
-                x=date_col,
-                y=bribe_col,
-                title="💰 Total Bribes Over Time",
-                labels={bribe_col: 'Total Bribes (USD)', date_col: 'Date'}
-            )
+        # Ensure date column is properly formatted (clean any remaining time/UTC strings)
+        timeline_data = df_bribes_display.copy()
+        if date_col in timeline_data.columns:
+            # Clean date strings if they're still strings
+            if timeline_data[date_col].dtype == 'object':
+                timeline_data[date_col] = timeline_data[date_col].astype(str).str.replace(r'\s+\d{2}:\d{2}:\d{2}\.\d+\s+UTC', '', regex=True)
+                timeline_data[date_col] = timeline_data[date_col].astype(str).str.replace(r'\s+\d{2}:\d{2}:\d{2}\s+UTC', '', regex=True)
+                timeline_data[date_col] = timeline_data[date_col].astype(str).str.replace(r'\s+UTC', '', regex=True)
+                timeline_data[date_col] = timeline_data[date_col].astype(str).str.strip()
+                timeline_data[date_col] = pd.to_datetime(timeline_data[date_col], errors='coerce')
+            
+            # Remove rows with invalid dates
+            timeline_data = timeline_data[timeline_data[date_col].notna()].copy()
         
-        fig_timeline.update_layout(
-            plot_bgcolor='rgba(0,0,0,0)',
-            paper_bgcolor='rgba(0,0,0,0)',
-            font_color='white',
-            title=dict(font=dict(color='white', size=16)),
-            xaxis=dict(gridcolor='rgba(255,255,255,0.1)'),
-            yaxis=dict(gridcolor='rgba(255,255,255,0.1)'),
-            legend=dict(bgcolor='rgba(0,0,0,0.5)')
-        )
-        st.plotly_chart(fig_timeline, use_container_width=True)
+        if not timeline_data.empty:
+            timeline_grouped = timeline_data.groupby([date_col, pool_col])[bribe_col].sum().reset_index()
+            if not timeline_grouped.empty and len(timeline_grouped[pool_col].unique()) <= 20:
+                # Show individual pools if not too many
+                fig_timeline = px.line(
+                    timeline_grouped,
+                    x=date_col,
+                    y=bribe_col,
+                    color=pool_col,
+                    title="💰 Bribe Amount Over Time by Pool",
+                    labels={bribe_col: 'Bribes (USD)', date_col: 'Date', pool_col: 'Pool'},
+                    markers=True
+                )
+            else:
+                # Aggregate by date if too many pools
+                timeline_agg = timeline_data.groupby(date_col)[bribe_col].sum().reset_index()
+                fig_timeline = px.line(
+                    timeline_agg,
+                    x=date_col,
+                    y=bribe_col,
+                    title="💰 Total Bribes Over Time",
+                    labels={bribe_col: 'Total Bribes (USD)', date_col: 'Date'},
+                    markers=True
+                )
+            
+            fig_timeline.update_layout(
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                font_color='white',
+                title=dict(font=dict(color='white', size=16)),
+                xaxis=dict(
+                    gridcolor='rgba(255,255,255,0.1)',
+                    tickfont=dict(size=9)  # Smaller font size for x-axis labels
+                ),
+                yaxis=dict(gridcolor='rgba(255,255,255,0.1)'),
+                legend=dict(bgcolor='rgba(0,0,0,0.5)')
+            )
+            st.plotly_chart(fig_timeline, use_container_width=True)
+        else:
+            st.info("No valid date data available for timeline visualization")
 
 # Detailed Pool Analysis (only for 'all' mode - shows all pools)
 if st.session_state.pool_filter_mode_bribes == 'all':
@@ -1287,8 +1319,40 @@ if st.session_state.pool_filter_mode_bribes == 'all':
     else:
         all_pools = []
     
-    # Show analysis for all pools
-    for pool in all_pools:
+    # Pagination for detailed analysis
+    items_per_page_detailed = 10
+    total_pools_detailed = len(all_pools)
+    
+    if total_pools_detailed > items_per_page_detailed:
+        # Pagination controls
+        total_pages_detailed = (total_pools_detailed + items_per_page_detailed - 1) // items_per_page_detailed
+        
+        pag_col1, pag_col2, pag_col3, pag_col4 = st.columns([0.2, 0.2, 0.2, 0.4])
+        with pag_col1:
+            if st.button("◀ Previous", disabled=(st.session_state.detailed_analysis_page <= 1), key="prev_page_detailed"):
+                st.session_state.detailed_analysis_page = max(1, st.session_state.detailed_analysis_page - 1)
+                st.rerun()
+        with pag_col2:
+            if st.button("Next ▶", disabled=(st.session_state.detailed_analysis_page >= total_pages_detailed), key="next_page_detailed"):
+                st.session_state.detailed_analysis_page = min(total_pages_detailed, st.session_state.detailed_analysis_page + 1)
+                st.rerun()
+        with pag_col3:
+            st.write(f"Page {st.session_state.detailed_analysis_page} of {total_pages_detailed}")
+        with pag_col4:
+            st.write(f"Showing {((st.session_state.detailed_analysis_page - 1) * items_per_page_detailed) + 1}-{min(st.session_state.detailed_analysis_page * items_per_page_detailed, total_pools_detailed)} of {total_pools_detailed} pools")
+        
+        # Calculate pagination range
+        start_idx_detailed = (st.session_state.detailed_analysis_page - 1) * items_per_page_detailed
+        end_idx_detailed = start_idx_detailed + items_per_page_detailed
+        paginated_pools_detailed = all_pools[start_idx_detailed:end_idx_detailed]
+    else:
+        # No pagination needed when there are few pools
+        paginated_pools_detailed = all_pools
+        if total_pools_detailed > 0:
+            st.info(f"Showing all {total_pools_detailed} pools")
+    
+    # Show analysis for paginated pools
+    for pool in paginated_pools_detailed:
         # Try to match pool from selected_pools (which are pool_symbol) with pool_col in bribes data
         # Match case-insensitive
         if not pool_bribes.empty and pool_col in pool_bribes.columns:
