@@ -1295,41 +1295,60 @@ for col in ['day', 'week_date', 'date', 'block_date', 'timestamp', 'week', 'peri
 if date_col:
     st.markdown("#### 📅 Bribe Timeline")
     if bribe_col in df_bribes_display.columns and not df_bribes_display.empty:
-        timeline_data = df_bribes_display.groupby([date_col, pool_col])[bribe_col].sum().reset_index()
-        if not timeline_data.empty and len(timeline_data[pool_col].unique()) <= 20:
-            # Show individual pools if not too many
-            fig_timeline = px.line(
-                timeline_data,
-                x=date_col,
-                y=bribe_col,
-                color=pool_col,
-                title="💰 Bribe Amount Over Time by Pool",
-                labels={bribe_col: 'Bribes (USD)', date_col: 'Date', pool_col: 'Pool'}
-            )
-        else:
-            # Aggregate by date if too many pools
-            timeline_agg = df_bribes_display.groupby(date_col)[bribe_col].sum().reset_index()
-            fig_timeline = px.line(
-                timeline_agg,
-                x=date_col,
-                y=bribe_col,
-                title="💰 Total Bribes Over Time",
-                labels={bribe_col: 'Total Bribes (USD)', date_col: 'Date'}
-            )
+        # Ensure date column is properly formatted (clean any remaining time/UTC strings)
+        timeline_data = df_bribes_display.copy()
+        if date_col in timeline_data.columns:
+            # Clean date strings if they're still strings
+            if timeline_data[date_col].dtype == 'object':
+                timeline_data[date_col] = timeline_data[date_col].astype(str).str.replace(r'\s+\d{2}:\d{2}:\d{2}\.\d+\s+UTC', '', regex=True)
+                timeline_data[date_col] = timeline_data[date_col].astype(str).str.replace(r'\s+\d{2}:\d{2}:\d{2}\s+UTC', '', regex=True)
+                timeline_data[date_col] = timeline_data[date_col].astype(str).str.replace(r'\s+UTC', '', regex=True)
+                timeline_data[date_col] = timeline_data[date_col].astype(str).str.strip()
+                timeline_data[date_col] = pd.to_datetime(timeline_data[date_col], errors='coerce')
+            
+            # Remove rows with invalid dates
+            timeline_data = timeline_data[timeline_data[date_col].notna()].copy()
         
-        fig_timeline.update_layout(
-            plot_bgcolor='rgba(0,0,0,0)',
-            paper_bgcolor='rgba(0,0,0,0)',
-            font_color='white',
-            title=dict(font=dict(color='white', size=16)),
-            xaxis=dict(
-                gridcolor='rgba(255,255,255,0.1)',
-                tickfont=dict(size=9)  # Smaller font size for x-axis labels
-            ),
-            yaxis=dict(gridcolor='rgba(255,255,255,0.1)'),
-            legend=dict(bgcolor='rgba(0,0,0,0.5)')
-        )
-        st.plotly_chart(fig_timeline, use_container_width=True)
+        if not timeline_data.empty:
+            timeline_grouped = timeline_data.groupby([date_col, pool_col])[bribe_col].sum().reset_index()
+            if not timeline_grouped.empty and len(timeline_grouped[pool_col].unique()) <= 20:
+                # Show individual pools if not too many
+                fig_timeline = px.line(
+                    timeline_grouped,
+                    x=date_col,
+                    y=bribe_col,
+                    color=pool_col,
+                    title="💰 Bribe Amount Over Time by Pool",
+                    labels={bribe_col: 'Bribes (USD)', date_col: 'Date', pool_col: 'Pool'},
+                    markers=True
+                )
+            else:
+                # Aggregate by date if too many pools
+                timeline_agg = timeline_data.groupby(date_col)[bribe_col].sum().reset_index()
+                fig_timeline = px.line(
+                    timeline_agg,
+                    x=date_col,
+                    y=bribe_col,
+                    title="💰 Total Bribes Over Time",
+                    labels={bribe_col: 'Total Bribes (USD)', date_col: 'Date'},
+                    markers=True
+                )
+            
+            fig_timeline.update_layout(
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                font_color='white',
+                title=dict(font=dict(color='white', size=16)),
+                xaxis=dict(
+                    gridcolor='rgba(255,255,255,0.1)',
+                    tickfont=dict(size=9)  # Smaller font size for x-axis labels
+                ),
+                yaxis=dict(gridcolor='rgba(255,255,255,0.1)'),
+                legend=dict(bgcolor='rgba(0,0,0,0.5)')
+            )
+            st.plotly_chart(fig_timeline, use_container_width=True)
+        else:
+            st.info("No valid date data available for timeline visualization")
 
 # Detailed Pool Analysis (only for 'all' mode - shows all pools)
 if st.session_state.pool_filter_mode_bribes == 'all':

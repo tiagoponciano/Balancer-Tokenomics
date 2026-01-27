@@ -1594,6 +1594,12 @@ def load_bribes_data():
             date_cols = ['date', 'block_date', 'timestamp', 'week', 'period']
             for col in date_cols:
                 if col in df_bribes.columns:
+                    # Clean date strings: remove time and UTC suffix, keep only YYYY-MM-DD
+                    df_bribes[col] = df_bribes[col].astype(str).str.replace(r'\s+\d{2}:\d{2}:\d{2}\.\d+\s+UTC', '', regex=True)
+                    df_bribes[col] = df_bribes[col].astype(str).str.replace(r'\s+\d{2}:\d{2}:\d{2}\s+UTC', '', regex=True)
+                    df_bribes[col] = df_bribes[col].astype(str).str.replace(r'\s+UTC', '', regex=True)
+                    df_bribes[col] = df_bribes[col].astype(str).str.strip()
+                    # Convert to datetime
                     df_bribes[col] = pd.to_datetime(df_bribes[col], errors='coerce')
             
             numeric_cols = [
@@ -1643,6 +1649,12 @@ def load_bribes_data():
         date_cols = ['date', 'block_date', 'timestamp', 'week', 'period']
         for col in date_cols:
             if col in df_bribes.columns:
+                # Clean date strings: remove time and UTC suffix, keep only YYYY-MM-DD
+                df_bribes[col] = df_bribes[col].astype(str).str.replace(r'\s+\d{2}:\d{2}:\d{2}\.\d+\s+UTC', '', regex=True)
+                df_bribes[col] = df_bribes[col].astype(str).str.replace(r'\s+\d{2}:\d{2}:\d{2}\s+UTC', '', regex=True)
+                df_bribes[col] = df_bribes[col].astype(str).str.replace(r'\s+UTC', '', regex=True)
+                df_bribes[col] = df_bribes[col].astype(str).str.strip()
+                # Convert to datetime
                 df_bribes[col] = pd.to_datetime(df_bribes[col], errors='coerce')
         
         # Convert numeric columns
