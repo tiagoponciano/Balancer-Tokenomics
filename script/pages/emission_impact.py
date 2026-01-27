@@ -101,51 +101,14 @@ if df.empty:
     st.error("❌ Unable to load data.")
     st.stop()
 
-df_sim = utils.run_simulation_sidebar(df)
-
-st.sidebar.markdown("---")
-st.sidebar.markdown("### 🔍 Pool Selection")
-
 # Initialize session state - default to 'all' (show everything)
 if 'pool_filter_mode_emission' not in st.session_state:
     st.session_state.pool_filter_mode_emission = 'all'  # Default: show all pools
 
-col_btn1, col_btn2 = st.sidebar.columns(2)
+# Pool filters at the top of sidebar (FIRST - before any other sidebar content)
+utils.show_pool_filters('pool_filter_mode_emission')
 
-with col_btn1:
-    if st.button("Top 20", key="btn_top20_emission"):
-        st.session_state.pool_filter_mode_emission = 'top20'
-        st.rerun()
-
-with col_btn2:
-    if st.button("Worst 20", key="btn_worst20_emission"):
-        st.session_state.pool_filter_mode_emission = 'worst20'
-        st.rerun()
-
-# Show "Select All" button only when a filter is active (top20 or worst20)
-if st.session_state.pool_filter_mode_emission in ['top20', 'worst20']:
-    if st.sidebar.button("Select All", key="btn_select_all_emission"):
-        st.session_state.pool_filter_mode_emission = 'all'
-        st.rerun()
-
-# Filter data based on mode
-if st.session_state.pool_filter_mode_emission == 'top20':
-    # Get top 20 pools
-    top_pools = utils.get_top_pools(df, n=20)
-    top_pools_list = [str(p) for p in top_pools]
-    df_display = df_sim[df_sim['pool_symbol'].isin(top_pools_list)].copy()
-    st.info(f"📊 Showing analysis for Top 20 Pools ({len(top_pools_list)} pools)")
-elif st.session_state.pool_filter_mode_emission == 'worst20':
-    # Get worst 20 pools
-    worst_pools = utils.get_worst_pools(df, n=20)
-    worst_pools_list = [str(p) for p in worst_pools]
-    df_display = df_sim[df_sim['pool_symbol'].isin(worst_pools_list)].copy()
-    st.info(f"📊 Showing analysis for Worst 20 Pools ({len(worst_pools_list)} pools)")
-else:
-    # 'all' mode - show everything
-    df_display = df_sim.copy()
-    total_pools = len(df_sim['pool_symbol'].unique()) if 'pool_symbol' in df_sim.columns else 0
-    st.info(f"📊 Showing analysis for all pools ({total_pools} pools)")
+df_sim = utils.run_simulation_sidebar(df)
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 📉 Emission Reduction Scenarios")
@@ -162,6 +125,21 @@ with col_logout:
     utils.show_logout_button()
 
 st.markdown("---")
+
+# Filter data based on mode
+if st.session_state.pool_filter_mode_emission == 'top20':
+    # Get top 20 pools
+    top_pools = utils.get_top_pools(df, n=20)
+    top_pools_list = [str(p) for p in top_pools]
+    df_display = df_sim[df_sim['pool_symbol'].isin(top_pools_list)].copy()
+elif st.session_state.pool_filter_mode_emission == 'worst20':
+    # Get worst 20 pools
+    worst_pools = utils.get_worst_pools(df, n=20)
+    worst_pools_list = [str(p) for p in worst_pools]
+    df_display = df_sim[df_sim['pool_symbol'].isin(worst_pools_list)].copy()
+else:
+    # 'all' mode - show everything
+    df_display = df_sim.copy()
 
 # ============================================================================
 # EMISSIONS ANALYSIS: LEGITIMATE VS MERCENARY

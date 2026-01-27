@@ -102,60 +102,19 @@ if df.empty:
     st.error("❌ Unable to load data.")
     st.stop()
 
-df_sim = utils.run_simulation_sidebar(df)
-
-st.sidebar.markdown("---")
-st.sidebar.markdown("### 🔍 Pool Selection")
-
 if 'selected_pools_weekly' not in st.session_state:
     st.session_state.selected_pools_weekly = []
 if 'pool_filter_mode_weekly' not in st.session_state:
     st.session_state.pool_filter_mode_weekly = 'all'  # Default: show all pools
 
-col_btn1, col_btn2 = st.sidebar.columns(2)
+# Pool filters at the top of sidebar (FIRST - before any other sidebar content)
+def clear_weekly_selections():
+    """Clear selections when filter changes"""
+    st.session_state.selected_pools_weekly = []
 
-with col_btn1:
-    if st.button("Top 20", key="btn_top20_weekly"):
-        old_mode = st.session_state.pool_filter_mode_weekly
-        st.session_state.pool_filter_mode_weekly = 'top20'
-        # Clear selections when mode changes
-        if old_mode != 'top20':
-            st.session_state.selected_pools_weekly = []
-        st.rerun()
+utils.show_pool_filters('pool_filter_mode_weekly', on_change_callback=clear_weekly_selections)
 
-with col_btn2:
-    if st.button("Worst 20", key="btn_worst20_weekly"):
-        old_mode = st.session_state.pool_filter_mode_weekly
-        st.session_state.pool_filter_mode_weekly = 'worst20'
-        # Clear selections when mode changes
-        if old_mode != 'worst20':
-            st.session_state.selected_pools_weekly = []
-        st.rerun()
-
-# Filter data based on mode
-if st.session_state.pool_filter_mode_weekly == 'top20':
-    # Get top 20 pools
-    top_pools = utils.get_top_pools(df, n=20)
-    top_pools_list = [str(p) for p in top_pools]
-    df_display = df_sim[df_sim['pool_symbol'].isin(top_pools_list)].copy()
-    st.info(f"📊 Showing analysis for Top 20 Pools ({len(top_pools_list)} pools)")
-elif st.session_state.pool_filter_mode_weekly == 'worst20':
-    # Get worst 20 pools
-    worst_pools = utils.get_worst_pools(df, n=20)
-    worst_pools_list = [str(p) for p in worst_pools]
-    df_display = df_sim[df_sim['pool_symbol'].isin(worst_pools_list)].copy()
-    st.info(f"📊 Showing analysis for Worst 20 Pools ({len(worst_pools_list)} pools)")
-else:
-    # 'all' mode - show everything
-    df_display = df_sim.copy()
-    total_pools = len(df_sim['pool_symbol'].unique()) if 'pool_symbol' in df_sim.columns else 0
-    st.info(f"📊 Showing analysis for all pools ({total_pools} pools)")
-
-# Show "Select All" button only when a filter is active (top20 or worst20)
-if st.session_state.pool_filter_mode_weekly in ['top20', 'worst20']:
-    if st.sidebar.button("Select All", key="btn_select_all_weekly"):
-        st.session_state.pool_filter_mode_weekly = 'all'
-        st.rerun()
+df_sim = utils.run_simulation_sidebar(df)
 
 # Page Header with logout button
 col_title, col_logout = st.columns([1, 0.1])
@@ -166,6 +125,27 @@ with col_logout:
     utils.show_logout_button()
 
 st.markdown("---")
+
+# Filter data based on mode
+if st.session_state.pool_filter_mode_weekly == 'top20':
+    # Get top 20 pools
+    top_pools = utils.get_top_pools(df, n=20)
+    top_pools_list = [str(p) for p in top_pools]
+    df_display = df_sim[df_sim['pool_symbol'].isin(top_pools_list)].copy()
+    # Clear selections when mode changes
+    if st.session_state.selected_pools_weekly:
+        st.session_state.selected_pools_weekly = []
+elif st.session_state.pool_filter_mode_weekly == 'worst20':
+    # Get worst 20 pools
+    worst_pools = utils.get_worst_pools(df, n=20)
+    worst_pools_list = [str(p) for p in worst_pools]
+    df_display = df_sim[df_sim['pool_symbol'].isin(worst_pools_list)].copy()
+    # Clear selections when mode changes
+    if st.session_state.selected_pools_weekly:
+        st.session_state.selected_pools_weekly = []
+else:
+    # 'all' mode - show everything
+    df_display = df_sim.copy()
 
 df_display['week'] = df_display['block_date'].dt.to_period('W').dt.start_time
 
