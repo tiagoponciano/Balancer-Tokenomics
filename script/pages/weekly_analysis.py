@@ -69,6 +69,35 @@ function applyButtonIds() {
                     if (!button.id || !button.id.startsWith('btn_logout')) {
                         button.id = 'btn_logout';
                     }
+                } else if (text === '%' || text === 'Absolute' || textLower === '%' || textLower === 'absolute') {
+                    if (!button.id || button.id !== 'btn_toggle_percentage') {
+                        button.id = 'btn_toggle_percentage';
+                        button.classList.add('performance-button-fallback');
+                        button.setAttribute('data-button-type', 'toggle');
+                        
+                        // Apply all inline styles directly (maximum priority)
+                        const styles = {
+                            'width': 'auto',
+                            'min-width': '100px',
+                            'max-width': '140px',
+                            'height': '36px',
+                            'padding': '0.5rem 1rem',
+                            'font-weight': '600',
+                            'background': 'linear-gradient(135deg, rgba(103, 162, 225, 0.18) 0%, rgba(103, 162, 225, 0.08) 100%)',
+                            'border': '1.5px solid rgba(103, 162, 225, 0.45)',
+                            'color': '#8BB5F0',
+                            'border-radius': '12px',
+                            'transition': 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                            'box-shadow': '0 3px 12px rgba(103, 162, 225, 0.15)',
+                            'position': 'relative',
+                            'overflow': 'hidden',
+                            'letter-spacing': '0.02em'
+                        };
+                        
+                        Object.keys(styles).forEach(prop => {
+                            button.style.setProperty(prop, styles[prop], 'important');
+                        });
+                    }
                 }
             });
         } catch(e) {
@@ -102,17 +131,11 @@ if df.empty:
     st.error("❌ Unable to load data.")
     st.stop()
 
-if 'selected_pools_weekly' not in st.session_state:
-    st.session_state.selected_pools_weekly = []
 if 'pool_filter_mode_weekly' not in st.session_state:
     st.session_state.pool_filter_mode_weekly = 'all'  # Default: show all pools
 
 # Pool filters at the top of sidebar (FIRST - before any other sidebar content)
-def clear_weekly_selections():
-    """Clear selections when filter changes"""
-    st.session_state.selected_pools_weekly = []
-
-utils.show_pool_filters('pool_filter_mode_weekly', on_change_callback=clear_weekly_selections)
+utils.show_pool_filters('pool_filter_mode_weekly')
 
 # Date filter: Year + Quarter
 filter_year, filter_quarter = utils.show_date_filter_sidebar(df, key_prefix="date_filter_weekly")
@@ -138,17 +161,11 @@ if st.session_state.pool_filter_mode_weekly == 'top20':
     top_pools = utils.get_top_pools(df, n=20)
     top_pools_list = [str(p) for p in top_pools]
     df_display = df_sim[df_sim['pool_symbol'].isin(top_pools_list)].copy()
-    # Clear selections when mode changes
-    if st.session_state.selected_pools_weekly:
-        st.session_state.selected_pools_weekly = []
 elif st.session_state.pool_filter_mode_weekly == 'worst20':
     # Get worst 20 pools
     worst_pools = utils.get_worst_pools(df, n=20)
     worst_pools_list = [str(p) for p in worst_pools]
     df_display = df_sim[df_sim['pool_symbol'].isin(worst_pools_list)].copy()
-    # Clear selections when mode changes
-    if st.session_state.selected_pools_weekly:
-        st.session_state.selected_pools_weekly = []
 else:
     # 'all' mode - show everything
     df_display = df_sim.copy()
@@ -213,21 +230,50 @@ pivot_weekly_incentives = df_weekly.pivot(index='week', columns='pool_category',
 
 colors = {'Legitimate': '#2ecc71', 'Mercenary': '#e74c3c', 'Undefined': '#95a5a6'}
 
+# Initialize session state for toggles
+if 'show_weekly_bal_percentage' not in st.session_state:
+    st.session_state.show_weekly_bal_percentage = False
+if 'show_weekly_incentives_percentage' not in st.session_state:
+    st.session_state.show_weekly_incentives_percentage = False
+
 col_chart1, col_chart2 = st.columns(2)
 
 with col_chart1:
-    st.markdown("**Weekly BAL Emissions by Category**")
+    # Toggle for percentage view
+    col_toggle1, _ = st.columns([1, 10])
+    with col_toggle1:
+        toggle_text1 = "%" if not st.session_state.show_weekly_bal_percentage else "Absolute"
+        if st.button(toggle_text1, key="toggle_weekly_bal_percentage"):
+            st.session_state.show_weekly_bal_percentage = not st.session_state.show_weekly_bal_percentage
+            st.rerun()
+    
+    chart_title1 = "**Weekly BAL Emissions by Category**" if not st.session_state.show_weekly_bal_percentage else "**Weekly BAL Emissions by Category (%)**"
+    st.markdown(chart_title1)
+    
+    # Calculate percentages if toggle is on
+    if st.session_state.show_weekly_bal_percentage:
+        row_sums = pivot_weekly.sum(axis=1)
+        pivot_weekly_pct = pivot_weekly.div(row_sums.replace(0, 1), axis=0) * 100
+        pivot_weekly_pct.loc[row_sums == 0] = 0
+        data_to_plot1 = pivot_weekly_pct
+        yaxis_title1 = "Percentage (%)"
+        hovertemplate_suffix1 = "%"
+    else:
+        data_to_plot1 = pivot_weekly
+        yaxis_title1 = ""
+        hovertemplate_suffix1 = " BAL"
     
     fig1 = go.Figure()
     
-    for category in pivot_weekly.columns:
+    for category in data_to_plot1.columns:
         fig1.add_trace(go.Scatter(
-            x=pivot_weekly.index,
-            y=pivot_weekly[category],
+            x=data_to_plot1.index,
+            y=data_to_plot1[category],
             mode='lines',
             name=category,
             line=dict(color=colors.get(category, '#3498db'), width=1.5),
-            stackgroup='one'
+            stackgroup='one',
+            hovertemplate=f'<b>{category}</b><br>%{{x|%b %d, %Y}}<br>%{{y:,.2f}}{hovertemplate_suffix1}<extra></extra>'
         ))
     
     fig1.update_layout(
@@ -247,8 +293,10 @@ with col_chart1:
             showgrid=True,
             gridcolor='rgba(255,255,255,0.05)',
             showline=False,
-            title="",
-            tickfont=dict(size=11, color='#8B95A6')
+            title=yaxis_title1,
+            tickfont=dict(size=11, color='#8B95A6'),
+            tickformat='.2f' if st.session_state.show_weekly_bal_percentage else ',.0f',
+            ticksuffix='%' if st.session_state.show_weekly_bal_percentage else ''
         ),
         hovermode='x unified',
         legend=dict(
@@ -264,18 +312,41 @@ with col_chart1:
     st.plotly_chart(fig1, use_container_width=True, key="weekly_bal_emissions")
 
 with col_chart2:
-    st.markdown("**Weekly Incentives Distribution (USD)**")
+    # Toggle for percentage view
+    col_toggle2, _ = st.columns([1, 10])
+    with col_toggle2:
+        toggle_text2 = "%" if not st.session_state.show_weekly_incentives_percentage else "Absolute"
+        if st.button(toggle_text2, key="toggle_weekly_incentives_percentage"):
+            st.session_state.show_weekly_incentives_percentage = not st.session_state.show_weekly_incentives_percentage
+            st.rerun()
+    
+    chart_title2 = "**Weekly Incentives Distribution (USD)**" if not st.session_state.show_weekly_incentives_percentage else "**Weekly Incentives Distribution (%)**"
+    st.markdown(chart_title2)
+    
+    # Calculate percentages if toggle is on
+    if st.session_state.show_weekly_incentives_percentage:
+        row_sums = pivot_weekly_incentives.sum(axis=1)
+        pivot_weekly_incentives_pct = pivot_weekly_incentives.div(row_sums.replace(0, 1), axis=0) * 100
+        pivot_weekly_incentives_pct.loc[row_sums == 0] = 0
+        data_to_plot2 = pivot_weekly_incentives_pct
+        yaxis_title2 = "Percentage (%)"
+        hovertemplate_suffix2 = "%"
+    else:
+        data_to_plot2 = pivot_weekly_incentives
+        yaxis_title2 = ""
+        hovertemplate_suffix2 = " USD"
     
     fig2 = go.Figure()
     
-    for category in pivot_weekly_incentives.columns:
+    for category in data_to_plot2.columns:
         fig2.add_trace(go.Scatter(
-            x=pivot_weekly_incentives.index,
-            y=pivot_weekly_incentives[category],
+            x=data_to_plot2.index,
+            y=data_to_plot2[category],
             mode='lines',
             name=category,
             line=dict(color=colors.get(category, '#3498db'), width=1.5),
-            stackgroup='one'
+            stackgroup='one',
+            hovertemplate=f'<b>{category}</b><br>%{{x|%b %d, %Y}}<br>%{{y:,.2f}}{hovertemplate_suffix2}<extra></extra>'
         ))
     
     fig2.update_layout(
@@ -295,8 +366,10 @@ with col_chart2:
             showgrid=True,
             gridcolor='rgba(255,255,255,0.05)',
             showline=False,
-            title="",
-            tickfont=dict(size=11, color='#8B95A6')
+            title=yaxis_title2,
+            tickfont=dict(size=11, color='#8B95A6'),
+            tickformat='.2f' if st.session_state.show_weekly_incentives_percentage else ',.0f',
+            ticksuffix='%' if st.session_state.show_weekly_incentives_percentage else ''
         ),
         hovermode='x unified',
         legend=dict(
