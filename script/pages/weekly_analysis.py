@@ -146,6 +146,37 @@ if df.empty:
 # Don't run simulation sidebar - we use bal_emited_votes directly from data (same as emission_impact page)
 df_sim = df.copy()
 
+# Ensure block_date is datetime (needed for temporal charts)
+if 'block_date' in df_sim.columns:
+    if not pd.api.types.is_datetime64_any_dtype(df_sim['block_date']):
+        df_sim['block_date'] = pd.to_datetime(df_sim['block_date'], errors='coerce')
+
+# Ensure we have bal_emited_votes (same column used in home page)
+if 'bal_emited_votes' not in df_sim.columns:
+    df_sim['bal_emited_votes'] = 0
+
+st.sidebar.markdown("---")
+st.sidebar.markdown("### 📉 Emission Reduction Scenario")
+
+# Custom reduction percentage input (number input for direct value entry)
+reduction_pct = st.sidebar.number_input(
+    "BAL Emission Reduction (%)",
+    min_value=0.0,
+    max_value=100.0,
+    value=0.0,
+    step=0.5,
+    help="Enter the percentage reduction in BAL emissions (e.g., 50 means 50% reduction, keeping 50% of emissions). Start with 0 for baseline."
+)
+
+reduction_factor = (100 - reduction_pct) / 100  # Convert to factor (50% reduction = 0.5 factor)
+
+# Toggle for core pools only
+core_only = st.sidebar.checkbox(
+    "Allow emissions only for Core Pools",
+    value=False,
+    help="If enabled, only core pools will receive emissions. Non-core pools will have zero emissions."
+)
+
 # Page Header with logout button
 col_title, col_logout = st.columns([1, 0.1])
 with col_title:
@@ -183,15 +214,26 @@ if 'block_date' in df_display.columns:
     if not pd.api.types.is_datetime64_any_dtype(df_display['block_date']):
         df_display['block_date'] = pd.to_datetime(df_display['block_date'], errors='coerce')
 
-df_display['week'] = df_display['block_date'].dt.to_period('W').dt.start_time
+# Apply emission reduction scenario (same as emission_impact page)
+df_scenario = utils.calculate_emission_reduction_impact(df_display, reduction_factor, core_only=core_only)
 
-df_weekly = df_display.groupby(['week', 'pool_category']).agg({
-    'bal_emited_votes': 'sum',
-    'direct_incentives': 'sum',
-    'votes_received': 'sum',
+df_scenario['week'] = df_scenario['block_date'].dt.to_period('W').dt.start_time
+
+df_weekly = df_scenario.groupby(['week', 'pool_category']).agg({
+    'reduced_bal_emitted': 'sum' if 'reduced_bal_emitted' in df_scenario.columns else 'bal_emited_votes',
+    'reduced_incentives': 'sum' if 'reduced_incentives' in df_scenario.columns else 'direct_incentives',
+    'votes_received': 'sum' if 'votes_received' in df_scenario.columns else 0,
     'protocol_fee_amount_usd': 'sum',
     'dao_profit_usd': 'sum'
 }).reset_index()
+
+# Rename columns for consistency
+if 'reduced_bal_emitted' in df_weekly.columns:
+    df_weekly['bal_emited_votes'] = df_weekly['reduced_bal_emitted']
+    df_weekly = df_weekly.drop(columns=['reduced_bal_emitted'])
+if 'reduced_incentives' in df_weekly.columns:
+    df_weekly['direct_incentives'] = df_weekly['reduced_incentives']
+    df_weekly = df_weekly.drop(columns=['reduced_incentives'])
 
 weekly_totals = df_weekly.groupby('week').agg({
     'bal_emited_votes': 'sum',
