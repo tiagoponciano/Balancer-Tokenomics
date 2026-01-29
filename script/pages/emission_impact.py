@@ -135,6 +135,8 @@ if 'pool_filter_mode_emission' not in st.session_state:
     st.session_state.pool_filter_mode_emission = 'all'  # Default: show all pools
 if 'show_core_percentage' not in st.session_state:
     st.session_state.show_core_percentage = False  # Default: show absolute values
+if 'show_legit_mercenary_percentage' not in st.session_state:
+    st.session_state.show_legit_mercenary_percentage = False  # Default: show absolute values
 
 # Pool filters at the top of sidebar (FIRST - before any other sidebar content)
 utils.show_pool_filters('pool_filter_mode_emission')
@@ -306,7 +308,17 @@ emissions_display['Percentage'] = emissions_display['Percentage'].apply(lambda x
 st.dataframe(emissions_display, use_container_width=True, hide_index=False)
 
 # Temporal chart for emissions by category
-st.markdown("#### 📈 Emissions Over Time: Legitimate vs Mercenary")
+col_chart_title_legit, col_toggle_legit = st.columns([1, 0.15])
+with col_chart_title_legit:
+    st.markdown("#### 📈 Emissions Over Time: Legitimate vs Mercenary")
+with col_toggle_legit:
+    # Button text changes based on current state
+    button_text_legit = "Absolute" if st.session_state.show_legit_mercenary_percentage else "%"
+    if st.button(button_text_legit, key="toggle_legit_mercenary_percentage", use_container_width=True):
+        st.session_state.show_legit_mercenary_percentage = not st.session_state.show_legit_mercenary_percentage
+        st.rerun()
+    
+    show_percentage_legit = st.session_state.show_legit_mercenary_percentage
 
 # Prepare temporal data - ensure block_date is datetime
 if 'block_date' in df_display.columns:
@@ -323,6 +335,21 @@ emissions_temporal = df_display.groupby(['month', 'pool_category']).agg({
 # Pivot for chart
 pivot_emissions = emissions_temporal.pivot(index='month', columns='pool_category', values=bal_col).fillna(0)
 
+# Normalize to percentage if toggle is on
+if show_percentage_legit:
+    # Calculate percentage for each month
+    row_sums = pivot_emissions.sum(axis=1)
+    pivot_emissions_pct = pivot_emissions.div(row_sums.replace(0, 1), axis=0) * 100
+    # Set to 0 where row sum was 0
+    pivot_emissions_pct.loc[row_sums == 0] = 0
+    data_to_plot_legit = pivot_emissions_pct
+    yaxis_title_legit = "Percentage (%)"
+    hovertemplate_suffix_legit = "%"
+else:
+    data_to_plot_legit = pivot_emissions
+    yaxis_title_legit = "BAL Emitted"
+    hovertemplate_suffix_legit = " BAL"
+
 # Create area chart
 fig_legit_mercenary = go.Figure()
 
@@ -332,16 +359,16 @@ colors = {
     'Undefined': '#95a5a6'
 }
 
-for category in pivot_emissions.columns:
+for category in data_to_plot_legit.columns:
     fig_legit_mercenary.add_trace(go.Scatter(
-        x=pivot_emissions.index,
-        y=pivot_emissions[category],
+        x=data_to_plot_legit.index,
+        y=data_to_plot_legit[category],
         mode='lines',
         name=category,
-        fill='tonexty' if category != pivot_emissions.columns[0] else 'tozeroy',
+        fill='tonexty' if category != data_to_plot_legit.columns[0] else 'tozeroy',
         stackgroup='one',
         line=dict(color=colors.get(category, '#3498db'), width=1.5),
-        hovertemplate=f'<b>{category}</b><br>%{{x|%b %Y}}<br>%{{y:,.0f}} BAL<extra></extra>'
+        hovertemplate=f'<b>{category}</b><br>%{{x|%b %Y}}<br>%{{y:,.2f}}{hovertemplate_suffix_legit}<extra></extra>'
     ))
 
 fig_legit_mercenary.update_layout(
@@ -361,8 +388,10 @@ fig_legit_mercenary.update_layout(
         showgrid=True,
         gridcolor='rgba(255,255,255,0.05)',
         showline=False,
-        title=dict(text="BAL Emitted", font=dict(size=12, color='#8B95A6')),
-        tickfont=dict(size=11, color='#8B95A6')
+        title=dict(text=yaxis_title_legit, font=dict(size=12, color='#8B95A6')),
+        tickfont=dict(size=11, color='#8B95A6'),
+        tickformat='.2f' if show_percentage_legit else ',.0f',
+        ticksuffix='%' if show_percentage_legit else ''
     ),
     hovermode='x unified',
     legend=dict(
