@@ -457,7 +457,7 @@ with tab1:
         display_df = ranking_df[['pool', 'Total Bribes (USD)']].copy()
         display_df.columns = ['Pool', 'Total Bribes (USD)']
         display_df['Total Bribes (USD)'] = display_df['Total Bribes (USD)'].apply(
-            lambda x: f"${float(x):,.2f}" if pd.notna(x) and float(x) > 0 else "$0.00"
+            lambda x: f"${float(x):,.0f}" if pd.notna(x) and float(x) > 0 else "$0"
         )
         st.dataframe(display_df, use_container_width=True, hide_index=True)
     elif bribe_col in pool_bribes.columns and not pool_bribes.empty:
