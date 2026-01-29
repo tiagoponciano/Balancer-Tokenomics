@@ -990,32 +990,40 @@ if date_col:
                 timeline_data[date_col] = timeline_data[date_col].astype(str).str.replace(r'\s+UTC', '', regex=True)
                 timeline_data[date_col] = timeline_data[date_col].astype(str).str.strip()
                 timeline_data[date_col] = pd.to_datetime(timeline_data[date_col], errors='coerce')
+            else:
+                # Ensure it's datetime
+                timeline_data[date_col] = pd.to_datetime(timeline_data[date_col], errors='coerce')
             
             # Remove rows with invalid dates
             timeline_data = timeline_data[timeline_data[date_col].notna()].copy()
+            
+            # Create month column for monthly grouping
+            if not timeline_data.empty:
+                timeline_data['year_month'] = timeline_data[date_col].dt.to_period('M').dt.to_timestamp()
         
         if not timeline_data.empty:
-            timeline_grouped = timeline_data.groupby([date_col, pool_col])[bribe_col].sum().reset_index()
+            # Group by month instead of date
+            timeline_grouped = timeline_data.groupby(['year_month', pool_col])[bribe_col].sum().reset_index()
             if not timeline_grouped.empty and len(timeline_grouped[pool_col].unique()) <= 20:
                 # Show individual pools if not too many
                 fig_timeline = px.line(
                     timeline_grouped,
-                    x=date_col,
+                    x='year_month',
                     y=bribe_col,
                     color=pool_col,
-                    title="💰 Bribe Amount Over Time by Pool",
-                    labels={bribe_col: 'Bribes (USD)', date_col: 'Date', pool_col: 'Pool'},
+                    title="💰 Bribe Amount Over Time by Pool (Monthly)",
+                    labels={bribe_col: 'Bribes (USD)', 'year_month': 'Month', pool_col: 'Pool'},
                     markers=True
                 )
             else:
-                # Aggregate by date if too many pools
-                timeline_agg = timeline_data.groupby(date_col)[bribe_col].sum().reset_index()
+                # Aggregate by month if too many pools
+                timeline_agg = timeline_data.groupby('year_month')[bribe_col].sum().reset_index()
                 fig_timeline = px.line(
                     timeline_agg,
-                    x=date_col,
+                    x='year_month',
                     y=bribe_col,
-                    title="💰 Total Bribes Over Time",
-                    labels={bribe_col: 'Total Bribes (USD)', date_col: 'Date'},
+                    title="💰 Total Bribes Over Time (Monthly)",
+                    labels={bribe_col: 'Total Bribes (USD)', 'year_month': 'Month'},
                     markers=True
                 )
             
