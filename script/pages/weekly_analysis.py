@@ -143,7 +143,8 @@ df = utils.apply_date_filter(df, filter_year, filter_quarter)
 if df.empty:
     st.warning("No data in selected period. Adjust Year/Quarter or select «All».")
 
-df_sim = utils.run_simulation_sidebar(df)
+# Don't run simulation sidebar - we use bal_emited_votes directly from data (same as emission_impact page)
+df_sim = df.copy()
 
 # Page Header with logout button
 col_title, col_logout = st.columns([1, 0.1])
@@ -176,6 +177,11 @@ else:
     df_display['pool_category'] = df_display['pool_category'].fillna('Undefined').astype(str)
 if 'direct_incentives' not in df_display.columns:
     df_display['direct_incentives'] = 0.0
+
+# Ensure block_date is datetime before using .dt accessor
+if 'block_date' in df_display.columns:
+    if not pd.api.types.is_datetime64_any_dtype(df_display['block_date']):
+        df_display['block_date'] = pd.to_datetime(df_display['block_date'], errors='coerce')
 
 df_display['week'] = df_display['block_date'].dt.to_period('W').dt.start_time
 
