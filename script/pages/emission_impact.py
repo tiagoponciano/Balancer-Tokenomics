@@ -68,6 +68,35 @@ function applyButtonIds() {
                     if (!button.id || !button.id.startsWith('btn_logout')) {
                         button.id = 'btn_logout';
                     }
+                } else if (text === '%' || text === 'Absolute' || textLower === '%' || textLower === 'absolute') {
+                    if (!button.id || button.id !== 'btn_toggle_percentage') {
+                        button.id = 'btn_toggle_percentage';
+                        button.classList.add('performance-button-fallback');
+                        button.setAttribute('data-button-type', 'toggle');
+                        
+                        // Apply all inline styles directly (maximum priority)
+                        const styles = {
+                            'width': 'auto',
+                            'min-width': '80px',
+                            'max-width': '120px',
+                            'height': '36px',
+                            'padding': '0.5rem 1rem',
+                            'font-weight': '600',
+                            'background': 'linear-gradient(135deg, rgba(103, 162, 225, 0.18) 0%, rgba(103, 162, 225, 0.08) 100%)',
+                            'border': '1.5px solid rgba(103, 162, 225, 0.45)',
+                            'color': '#8BB5F0',
+                            'border-radius': '12px',
+                            'transition': 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                            'box-shadow': '0 3px 12px rgba(103, 162, 225, 0.15)',
+                            'position': 'relative',
+                            'overflow': 'hidden',
+                            'letter-spacing': '0.02em'
+                        };
+                        
+                        Object.keys(styles).forEach(prop => {
+                            button.style.setProperty(prop, styles[prop], 'important');
+                        });
+                    }
                 }
             });
         } catch(e) {
