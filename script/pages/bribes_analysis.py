@@ -60,8 +60,6 @@ if 'show_performance_by_pool' not in st.session_state:
     st.session_state.show_performance_by_pool = False
 if 'performance_page' not in st.session_state:
     st.session_state.performance_page = 1
-if 'detailed_analysis_page' not in st.session_state:
-    st.session_state.detailed_analysis_page = 1
 
 components.html("""
 <script>
@@ -206,7 +204,6 @@ def reset_performance_view():
     """Reset performance view when filter changes"""
     st.session_state.show_performance_by_pool = False
     st.session_state.performance_page = 1
-    st.session_state.detailed_analysis_page = 1
 
 utils.show_pool_filters('pool_filter_mode_bribes', on_change_callback=reset_performance_view)
 
@@ -223,17 +220,17 @@ if st.session_state.pool_filter_mode_bribes == "top20":
     mask = df_bribes["pool_symbol"].astype(str).str.strip().isin([str(p).strip() for p in top_pools])
     df_bribes_display = df_bribes[mask].copy() if mask.any() else df_bribes.copy()
     n = df_bribes_display["pool_symbol"].nunique()
-    st.info(f"📊 Top 20 Pools by protocol fees ({n} pools, from balancer_v2_merged)")
+    # Removed info message - filter is already shown in sidebar
 elif st.session_state.pool_filter_mode_bribes == "worst20":
     worst_pools = utils.get_worst_pools(df, n=20)
     mask = df_bribes["pool_symbol"].astype(str).str.strip().isin([str(p).strip() for p in worst_pools])
     df_bribes_display = df_bribes[mask].copy() if mask.any() else df_bribes.copy()
     n = df_bribes_display["pool_symbol"].nunique()
-    st.info(f"📊 Worst 20 Pools by protocol fees ({n} pools, from balancer_v2_merged)")
+    # Removed info message - filter is already shown in sidebar
 else:
     df_bribes_display = df_bribes.copy()
     n = df_bribes_display["pool_symbol"].nunique()
-    st.info(f"📊 All Pools ({n} pools)")
+    # Removed info message - filter is already shown in sidebar
 
 # Page Header with logout button
 col_title, col_logout = st.columns([1, 0.1])
@@ -710,6 +707,21 @@ if st.session_state.show_performance_by_pool:
         if pool_match_col and not df_bribes_display.empty:
             category_pools = df_bribes_display[pool_match_col].unique().tolist()
             category_pools = [str(p) for p in category_pools if pd.notna(p)]
+            
+            # Sort pools by bribe amount (descending)
+            if bribe_col in df_bribes_display.columns:
+                pool_bribes_totals = df_bribes_display.groupby(pool_match_col)[bribe_col].sum().sort_values(ascending=False)
+                category_pools_sorted = []
+                # Add pools with bribes first (sorted by amount)
+                for pool in pool_bribes_totals.index:
+                    pool_str = str(pool)
+                    if pool_str in category_pools:
+                        category_pools_sorted.append(pool_str)
+                # Add remaining pools (those with 0 or no bribe data)
+                for pool in category_pools:
+                    if pool not in category_pools_sorted:
+                        category_pools_sorted.append(pool)
+                category_pools = category_pools_sorted
         else:
             category_pools = []
 
@@ -1002,30 +1014,16 @@ if date_col:
                 timeline_data['year_month'] = timeline_data[date_col].dt.to_period('M').dt.to_timestamp()
         
         if not timeline_data.empty:
-            # Group by month instead of date
-            timeline_grouped = timeline_data.groupby(['year_month', pool_col])[bribe_col].sum().reset_index()
-            if not timeline_grouped.empty and len(timeline_grouped[pool_col].unique()) <= 20:
-                # Show individual pools if not too many
-                fig_timeline = px.line(
-                    timeline_grouped,
-                    x='year_month',
-                    y=bribe_col,
-                    color=pool_col,
-                    title="💰 Bribe Amount Over Time by Pool (Monthly)",
-                    labels={bribe_col: 'Bribes (USD)', 'year_month': 'Month', pool_col: 'Pool'},
-                    markers=True
-                )
-            else:
-                # Aggregate by month if too many pools
-                timeline_agg = timeline_data.groupby('year_month')[bribe_col].sum().reset_index()
-                fig_timeline = px.line(
-                    timeline_agg,
-                    x='year_month',
-                    y=bribe_col,
-                    title="💰 Total Bribes Over Time (Monthly)",
-                    labels={bribe_col: 'Total Bribes (USD)', 'year_month': 'Month'},
-                    markers=True
-                )
+            # Aggregate by month (total, not by pool)
+            timeline_agg = timeline_data.groupby('year_month')[bribe_col].sum().reset_index()
+            fig_timeline = px.line(
+                timeline_agg,
+                x='year_month',
+                y=bribe_col,
+                title="💰 Total Bribes Over Time (Monthly)",
+                labels={bribe_col: 'Total Bribes (USD)', 'year_month': 'Month'},
+                markers=True
+            )
             
             fig_timeline.update_layout(
                 plot_bgcolor='rgba(0,0,0,0)',
@@ -1042,81 +1040,3 @@ if date_col:
             st.plotly_chart(fig_timeline, use_container_width=True)
         else:
             st.info("No valid date data available for timeline visualization")
-
-# Detailed Pool Analysis (only for 'all' mode - shows all pools)
-if st.session_state.pool_filter_mode_bribes == 'all':
-    st.markdown("---")
-    st.markdown("### 🔍 Detailed Pool Analysis")
-    
-    # Get all pools from bribes data
-    if pool_match_col and not df_bribes_display.empty:
-        all_pools = df_bribes_display[pool_match_col].unique().tolist()
-        all_pools = [str(p) for p in all_pools if pd.notna(p)]
-    else:
-        all_pools = []
-    
-    # Pagination for detailed analysis
-    items_per_page_detailed = 10
-    total_pools_detailed = len(all_pools)
-    
-    if total_pools_detailed > items_per_page_detailed:
-        # Pagination controls
-        total_pages_detailed = (total_pools_detailed + items_per_page_detailed - 1) // items_per_page_detailed
-        
-        pag_col1, pag_col2, pag_col3, pag_col4 = st.columns([0.2, 0.2, 0.2, 0.4])
-        with pag_col1:
-            if st.button("◀ Previous", disabled=(st.session_state.detailed_analysis_page <= 1), key="prev_page_detailed"):
-                st.session_state.detailed_analysis_page = max(1, st.session_state.detailed_analysis_page - 1)
-                st.rerun()
-        with pag_col2:
-            if st.button("Next ▶", disabled=(st.session_state.detailed_analysis_page >= total_pages_detailed), key="next_page_detailed"):
-                st.session_state.detailed_analysis_page = min(total_pages_detailed, st.session_state.detailed_analysis_page + 1)
-                st.rerun()
-        with pag_col3:
-            st.write(f"Page {st.session_state.detailed_analysis_page} of {total_pages_detailed}")
-        with pag_col4:
-            st.write(f"Showing {((st.session_state.detailed_analysis_page - 1) * items_per_page_detailed) + 1}-{min(st.session_state.detailed_analysis_page * items_per_page_detailed, total_pools_detailed)} of {total_pools_detailed} pools")
-        
-        # Calculate pagination range
-        start_idx_detailed = (st.session_state.detailed_analysis_page - 1) * items_per_page_detailed
-        end_idx_detailed = start_idx_detailed + items_per_page_detailed
-        paginated_pools_detailed = all_pools[start_idx_detailed:end_idx_detailed]
-    else:
-        # No pagination needed when there are few pools
-        paginated_pools_detailed = all_pools
-        if total_pools_detailed > 0:
-            st.info(f"Showing all {total_pools_detailed} pools")
-    
-    # Show analysis for paginated pools
-    for pool in paginated_pools_detailed:
-        # Try to match pool from selected_pools (which are pool_symbol) with pool_col in bribes data
-        # Match case-insensitive
-        if not pool_bribes.empty and pool_col in pool_bribes.columns:
-            pool_bribe_data = pool_bribes[
-                pool_bribes[pool_col].astype(str).str.upper().str.strip() == pool.upper().strip()
-            ]
-        else:
-            pool_bribe_data = pd.DataFrame()
-        if not pool_bribe_data.empty:
-            with st.expander(f"📊 {pool}", expanded=False):
-                col_p1, col_p2, col_p3 = st.columns(3)
-                
-                pool_bribes_val = pool_bribe_data[bribe_col].iloc[0] if bribe_col in pool_bribe_data.columns else 0
-                pool_votes_val = pool_bribe_data[votes_col].iloc[0] if votes_col and votes_col in pool_bribe_data.columns else 0
-                pool_vebal_votes = pool_bribe_data['vebal_votes'].iloc[0] if 'vebal_votes' in pool_bribe_data.columns and pd.notna(pool_bribe_data['vebal_votes'].iloc[0]) else 0
-                pool_vebal_pct = pool_bribe_data['vebal_pct_votes'].iloc[0] if 'vebal_pct_votes' in pool_bribe_data.columns and pd.notna(pool_bribe_data['vebal_pct_votes'].iloc[0]) else 0
-                pool_vebal_rank = pool_bribe_data['vebal_ranking'].iloc[0] if 'vebal_ranking' in pool_bribe_data.columns and pd.notna(pool_bribe_data['vebal_ranking'].iloc[0]) else None
-                
-                col_p1, col_p2, col_p3 = st.columns(3)
-                
-                with col_p1:
-                    st.metric("Total Bribes", f"${pool_bribes_val:,.0f}")
-                with col_p2:
-                    st.metric("Votes Received", f"{pool_votes_val:,.0f}")
-                with col_p3:
-                    if pool_vebal_votes > 0:
-                        rank_text = f"#{int(pool_vebal_rank)}" if pool_vebal_rank else "N/A"
-                        st.metric("veBAL Votes", f"{pool_vebal_votes:,.0f}", delta=f"{pool_vebal_pct*100:.2f}% share", help=f"Ranking: {rank_text}")
-                    else:
-                        st.metric("veBAL Votes", "N/A", help="No veBAL votes data available")
-                
