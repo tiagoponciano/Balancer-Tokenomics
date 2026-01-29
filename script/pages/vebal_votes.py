@@ -72,6 +72,106 @@ function applyButtonIds() {
                     }
                 }
             });
+            
+            // Style number inputs - only cursor pointer
+            const numberInputs = doc.querySelectorAll('input[type="number"]');
+            numberInputs.forEach((input) => {
+                input.style.cursor = 'pointer';
+            });
+            
+            // Style selectboxes (same as date filter)
+            const selectboxes = doc.querySelectorAll('div[data-baseweb="select"]:not(:has(span[role="listbox"] > span)) > div:first-child');
+            selectboxes.forEach((select) => {
+                if (!select.hasAttribute('data-styled')) {
+                    select.setAttribute('data-styled', 'true');
+                    select.style.background = 'linear-gradient(135deg, rgba(103, 162, 225, 0.18) 0%, rgba(103, 162, 225, 0.08) 100%)';
+                    select.style.border = '1.5px solid rgba(103, 162, 225, 0.45)';
+                    select.style.boxShadow = '0 3px 12px rgba(103, 162, 225, 0.15)';
+                    select.style.borderRadius = '12px';
+                    select.style.transition = 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
+                    select.style.position = 'relative';
+                    select.style.overflow = 'hidden';
+                    select.style.display = 'flex';
+                    select.style.alignItems = 'center';
+                    select.style.cursor = 'pointer';
+                    select.style.animation = 'sidebarSaltinho 0.35s ease-out both';
+                    
+                    // Create shimmer effect
+                    const shimmer = document.createElement('div');
+                    shimmer.style.cssText = `
+                        content: '';
+                        position: absolute;
+                        top: 0;
+                        left: -100%;
+                        width: 100%;
+                        height: 100%;
+                        background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.15), transparent);
+                        transition: left 0.6s ease;
+                        pointer-events: none;
+                        z-index: 1;
+                    `;
+                    select.appendChild(shimmer);
+                    
+                    // Create border glow
+                    const borderGlow = document.createElement('div');
+                    borderGlow.style.cssText = `
+                        content: '';
+                        position: absolute;
+                        inset: 0;
+                        border-radius: 12px;
+                        padding: 1.5px;
+                        background: linear-gradient(135deg, rgba(103, 162, 225, 0.6), rgba(103, 162, 225, 0.2));
+                        -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+                        -webkit-mask-composite: xor;
+                        mask-composite: exclude;
+                        opacity: 0;
+                        transition: opacity 0.3s;
+                        pointer-events: none;
+                        z-index: 0;
+                    `;
+                    select.appendChild(borderGlow);
+                    
+                    // Hover effects
+                    select.addEventListener('mouseenter', function() {
+                        this.style.background = 'linear-gradient(135deg, rgba(103, 162, 225, 0.28) 0%, rgba(103, 162, 225, 0.15) 100%)';
+                        this.style.borderColor = 'rgba(103, 162, 225, 0.7)';
+                        this.style.transform = 'translateY(-3px) scale(1.02)';
+                        this.style.boxShadow = '0 6px 20px rgba(103, 162, 225, 0.3)';
+                        shimmer.style.left = '100%';
+                        borderGlow.style.opacity = '1';
+                    });
+                    
+                    select.addEventListener('mouseleave', function() {
+                        this.style.background = 'linear-gradient(135deg, rgba(103, 162, 225, 0.18) 0%, rgba(103, 162, 225, 0.08) 100%)';
+                        this.style.borderColor = 'rgba(103, 162, 225, 0.45)';
+                        this.style.transform = 'translateY(0) scale(1)';
+                        this.style.boxShadow = '0 3px 12px rgba(103, 162, 225, 0.15)';
+                        shimmer.style.left = '-100%';
+                        borderGlow.style.opacity = '0';
+                    });
+                    
+                    select.addEventListener('mousedown', function() {
+                        this.style.transform = 'translateY(-1px) scale(1.01)';
+                        this.style.boxShadow = '0 3px 12px rgba(103, 162, 225, 0.2)';
+                    });
+                    
+                    select.addEventListener('mouseup', function() {
+                        this.style.transform = 'translateY(-3px) scale(1.02)';
+                        this.style.boxShadow = '0 6px 20px rgba(103, 162, 225, 0.3)';
+                    });
+                    
+                    // Center align text content (same as date filter)
+                    const textContainer = select.querySelector('div:first-child');
+                    if (textContainer) {
+                        textContainer.style.flex = '1';
+                        textContainer.style.minWidth = '0';
+                        textContainer.style.textAlign = 'center';
+                        textContainer.style.display = 'flex';
+                        textContainer.style.justifyContent = 'center';
+                        textContainer.style.alignItems = 'center';
+                    }
+                }
+            });
         } catch(e) {
             console.error(`[Button IDs] Erro no contexto ${name}:`, e);
         }
@@ -192,7 +292,7 @@ st.markdown("---")
 # Rankings and Visualizations
 st.markdown("### 🏆 Gauge Rankings")
 
-tab1, tab2, tab3, tab4 = st.tabs(["📊 Top Gauges", "📈 Distribution", "🥧 Vote Share", "📋 Full Table"])
+tab1, tab2, tab3 = st.tabs(["📊 Top Gauges", "🥧 Vote Share", "📋 Full Table"])
 
 with tab1:
     st.markdown("#### Top 20 Gauges by Votes")
@@ -266,93 +366,6 @@ with tab1:
     st.dataframe(top_n_display, use_container_width=True, hide_index=True)
 
 with tab2:
-    st.markdown("#### Vote Distribution Analysis")
-    
-    col_dist1, col_dist2 = st.columns(2)
-    
-    with col_dist1:
-        # Histogram with log scale option
-        use_log = st.checkbox("Use logarithmic scale", value=False)
-        
-        fig_hist = go.Figure()
-        fig_hist.add_trace(go.Histogram(
-            x=df_display['votes'],
-            nbinsx=50,
-            marker=dict(
-                color='#67A2E1',
-                line=dict(color='rgba(103, 162, 225, 0.3)', width=1)
-            ),
-            hovertemplate='Votes: %{x:,.0f}<br>Count: %{y}<extra></extra>'
-        ))
-        
-        xaxis_type = 'log' if use_log else 'linear'
-        fig_hist.update_layout(
-            plot_bgcolor='rgba(0,0,0,0)',
-            paper_bgcolor='rgba(0,0,0,0)',
-            font_color='white',
-            title=dict(text="Distribution of Votes Across Gauges", font=dict(color='white', size=16)),
-            xaxis=dict(
-                gridcolor='rgba(255,255,255,0.1)',
-                title=dict(text="Votes", font=dict(color='#8B95A6')),
-                type=xaxis_type
-            ),
-            yaxis=dict(
-                gridcolor='rgba(255,255,255,0.1)',
-                title=dict(text="Number of Gauges", font=dict(color='#8B95A6'))
-            ),
-            height=400
-        )
-        st.plotly_chart(fig_hist, use_container_width=True)
-    
-    with col_dist2:
-        # Box plot
-        fig_box = go.Figure()
-        fig_box.add_trace(go.Box(
-            y=df_display['votes'],
-            name='Votes Distribution',
-            marker_color='#B1ACF1',
-            boxmean='sd'
-        ))
-        fig_box.update_layout(
-            plot_bgcolor='rgba(0,0,0,0)',
-            paper_bgcolor='rgba(0,0,0,0)',
-            font_color='white',
-            title=dict(text="Vote Distribution Box Plot", font=dict(color='white', size=16)),
-            yaxis=dict(
-                gridcolor='rgba(255,255,255,0.1)',
-                title=dict(text="Votes", font=dict(color='#8B95A6')),
-                type='log'
-            ),
-            xaxis=dict(showgrid=False),
-            height=400,
-            showlegend=False
-        )
-        st.plotly_chart(fig_box, use_container_width=True)
-    
-    # Statistics
-    col_stat1, col_stat2, col_stat3, col_stat4, col_stat5 = st.columns(5)
-    with col_stat1:
-        st.metric("Mean Votes", f"{df_display['votes'].mean():,.0f}")
-    with col_stat2:
-        st.metric("Median Votes", f"{df_display['votes'].median():,.0f}")
-    with col_stat3:
-        st.metric("Std Deviation", f"{df_display['votes'].std():,.0f}")
-    with col_stat4:
-        st.metric("Min Votes", f"{df_display['votes'].min():,.2f}")
-    with col_stat5:
-        st.metric("Max Votes", f"{df_display['votes'].max():,.0f}")
-    
-    # Percentiles
-    st.markdown("#### Percentiles")
-    percentiles = [10, 25, 50, 75, 90, 95, 99]
-    percentile_data = {f'P{p}': np.percentile(df_display['votes'], p) for p in percentiles}
-    col_p1, col_p2, col_p3, col_p4, col_p5, col_p6, col_p7 = st.columns(7)
-    cols_p = [col_p1, col_p2, col_p3, col_p4, col_p5, col_p6, col_p7]
-    for col, (label, value) in zip(cols_p, percentile_data.items()):
-        with col:
-            st.metric(label, f"{value:,.0f}")
-
-with tab3:
     st.markdown("#### Vote Share Visualization")
     
     n_top_pie = st.slider("Number of top gauges for pie chart", 5, 20, 10, 1)
@@ -474,7 +487,7 @@ with tab3:
     )
     st.plotly_chart(fig_cum, use_container_width=True)
 
-with tab4:
+with tab3:
     st.markdown("#### Full Gauge Rankings")
     
     col_filter1, col_filter2, col_filter3 = st.columns(3)
