@@ -68,6 +68,35 @@ function applyButtonIds() {
                     if (!button.id || !button.id.startsWith('btn_logout')) {
                         button.id = 'btn_logout';
                     }
+                } else if (text === '%' || text === 'Absolute' || textLower === '%' || textLower === 'absolute') {
+                    if (!button.id || button.id !== 'btn_toggle_percentage') {
+                        button.id = 'btn_toggle_percentage';
+                        button.classList.add('performance-button-fallback');
+                        button.setAttribute('data-button-type', 'toggle');
+                        
+                        // Apply all inline styles directly (maximum priority)
+                        const styles = {
+                            'width': 'auto',
+                            'min-width': '100px',
+                            'max-width': '140px',
+                            'height': '36px',
+                            'padding': '0.5rem 1rem',
+                            'font-weight': '600',
+                            'background': 'linear-gradient(135deg, rgba(103, 162, 225, 0.18) 0%, rgba(103, 162, 225, 0.08) 100%)',
+                            'border': '1.5px solid rgba(103, 162, 225, 0.45)',
+                            'color': '#8BB5F0',
+                            'border-radius': '12px',
+                            'transition': 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                            'box-shadow': '0 3px 12px rgba(103, 162, 225, 0.15)',
+                            'position': 'relative',
+                            'overflow': 'hidden',
+                            'letter-spacing': '0.02em'
+                        };
+                        
+                        Object.keys(styles).forEach(prop => {
+                            button.style.setProperty(prop, styles[prop], 'important');
+                        });
+                    }
                 }
             });
         } catch(e) {
@@ -124,6 +153,38 @@ with col_logout:
 
 st.markdown("---")
 
+# Add explanation section (same as emission_impact.py)
+st.markdown("### 📖 Understanding Pool Classification")
+
+with st.expander("ℹ️ What are Legitimate vs Mercenary Pools?", expanded=False):
+    st.markdown("""
+    **Legitimate Pools:**
+    - Pools that generate positive DAO profit (revenue > bribes)
+    - Have good emissions ROI (revenue/bribes > 1.0)
+    - Generate meaningful revenue (>$10k) even without bribes
+    - Core pools with ROI > 0.7 are typically classified as legitimate
+    
+    **Mercenary Pools:**
+    - Pools that generate negative DAO profit (revenue < bribes)
+    - Have poor emissions ROI (revenue/bribes < 0.5)
+    - Highly dependent on bribes (>80% of revenue comes from bribes)
+    - Generate little to no revenue without bribes
+    
+    **Undefined Pools:**
+    - Pools that don't clearly fit into either category
+    - May have no bribes but also low revenue
+    - Require further analysis to classify
+    
+    **Core Pools:**
+    - Pools designated as "core" by the protocol
+    - Typically receive priority in emissions distribution
+    - May have different revenue distribution rules
+    
+    **Note:** This analysis focuses on bribes (voting incentives). Direct incentives are not considered in this classification.
+    """)
+
+st.markdown("---")
+
 # Filter data based on mode
 if st.session_state.pool_filter_mode_class == 'top20':
     # Get top 20 pools
@@ -151,13 +212,13 @@ category_stats = df_display.groupby('pool_category').agg({
     'bal_emited_votes': 'sum'
 }).round(2)
 
-category_stats.columns = ['Pool Count', 'Total Revenue', 'Total Incentives', 'Total DAO Profit', 'Total BAL Emitted']
+category_stats.columns = ['Pool Count', 'Total Revenue', 'Total Bribes', 'Total DAO Profit', 'Total BAL Emitted']
 
-total_incentives = category_stats['Total Incentives'].sum()
+total_bribes = category_stats['Total Bribes'].sum()
 total_bal = category_stats['Total BAL Emitted'].sum()
 
-if total_incentives > 0:
-    category_stats['% of Total Incentives'] = (category_stats['Total Incentives'] / total_incentives * 100).round(2)
+if total_bribes > 0:
+    category_stats['% of Total Bribes'] = (category_stats['Total Bribes'] / total_bribes * 100).round(2)
 if total_bal > 0:
     category_stats['% of Total BAL'] = (category_stats['Total BAL Emitted'] / total_bal * 100).round(2)
 
@@ -181,12 +242,12 @@ st.markdown("---")
 
 # Format monetary columns for display
 category_stats_display = category_stats.copy()
-for col in ['Total Revenue', 'Total Incentives', 'Total DAO Profit']:
+for col in ['Total Revenue', 'Total Bribes', 'Total DAO Profit']:
     if col in category_stats_display.columns:
         category_stats_display[col] = category_stats_display[col].apply(lambda x: f"${x:,.0f}" if pd.notna(x) else "$0")
 
 # Format percentage columns
-for col in ['% of Total Incentives', '% of Total BAL']:
+for col in ['% of Total Bribes', '% of Total BAL']:
     if col in category_stats_display.columns:
         category_stats_display[col] = category_stats_display[col].apply(lambda x: f"{x:.2f}%" if pd.notna(x) else "0.00%")
 
@@ -196,119 +257,175 @@ st.markdown("---")
 
 st.markdown("### 📈 Historical Distribution by Category")
 
-df_monthly = df_display.groupby([df_display['block_date'].dt.to_period('M'), 'pool_category']).agg({
-    'direct_incentives': 'sum',
-    'dao_profit_usd': 'sum'
-}).reset_index()
+# Ensure block_date is datetime before using .dt accessor
+if 'block_date' in df_display.columns:
+    if not pd.api.types.is_datetime64_any_dtype(df_display['block_date']):
+        df_display['block_date'] = pd.to_datetime(df_display['block_date'], errors='coerce')
+    
+    # Filter out rows with invalid dates
+    df_display_valid = df_display[df_display['block_date'].notna()].copy()
+    
+    if not df_display_valid.empty:
+        df_monthly = df_display_valid.groupby([df_display_valid['block_date'].dt.to_period('M'), 'pool_category']).agg({
+            'direct_incentives': 'sum',
+            'dao_profit_usd': 'sum'
+        }).reset_index()
+    else:
+        st.warning("No valid date data available for historical distribution.")
+        df_monthly = pd.DataFrame()
+else:
+    st.warning("block_date column not found. Cannot create historical distribution.")
+    df_monthly = pd.DataFrame()
 
-df_monthly['block_date'] = df_monthly['block_date'].astype(str)
+if not df_monthly.empty:
+    df_monthly['block_date'] = df_monthly['block_date'].astype(str)
 
-pivot_incentives = df_monthly.pivot(index='block_date', columns='pool_category', values='direct_incentives').fillna(0)
-pivot_profit = df_monthly.pivot(index='block_date', columns='pool_category', values='dao_profit_usd').fillna(0)
+    pivot_incentives = df_monthly.pivot(index='block_date', columns='pool_category', values='direct_incentives').fillna(0)
+    pivot_profit = df_monthly.pivot(index='block_date', columns='pool_category', values='dao_profit_usd').fillna(0)
 
-pivot_incentives.index = pd.to_datetime(pivot_incentives.index)
-pivot_profit.index = pd.to_datetime(pivot_profit.index)
+    pivot_incentives.index = pd.to_datetime(pivot_incentives.index)
+    pivot_profit.index = pd.to_datetime(pivot_profit.index)
+else:
+    pivot_incentives = pd.DataFrame()
+    pivot_profit = pd.DataFrame()
 
 colors = {'Legitimate': '#2ecc71', 'Mercenary': '#e74c3c', 'Undefined': '#95a5a6'}
 
-col_chart1, col_chart2 = st.columns(2)
+if pivot_incentives.empty or pivot_profit.empty:
+    st.info("No data available for historical distribution charts.")
+else:
+    # Toggle for percentage view
+    if 'show_percentage_bribes' not in st.session_state:
+        st.session_state.show_percentage_bribes = False
+    
+    col_toggle, _ = st.columns([1, 10])
+    with col_toggle:
+        toggle_text = "%" if not st.session_state.show_percentage_bribes else "Absolute"
+        if st.button(toggle_text, key="toggle_bribes_percentage"):
+            st.session_state.show_percentage_bribes = not st.session_state.show_percentage_bribes
+            st.rerun()
+    
+    col_chart1, col_chart2 = st.columns(2)
 
-with col_chart1:
-    st.markdown("**Monthly Incentives Distribution**")
-    
-    fig1 = go.Figure()
-    
-    for category in pivot_incentives.columns:
-        fig1.add_trace(go.Scatter(
-            x=pivot_incentives.index,
-            y=pivot_incentives[category],
-            mode='lines',
-            name=category,
-            line=dict(color=colors.get(category, '#3498db'), width=1.5),
-            stackgroup='one'
-        ))
-    
-    fig1.update_layout(
-        template='plotly_dark',
-        paper_bgcolor='rgba(0,0,0,0)',
-        plot_bgcolor='rgba(0,0,0,0)',
-        height=400,
-        margin=dict(l=40, r=20, t=20, b=40),
-        xaxis=dict(
-            showgrid=False,
-            showline=True,
-            linecolor='rgba(255,255,255,0.1)',
-            title="",
-            tickfont=dict(size=11, color='#8B95A6')
-        ),
-        yaxis=dict(
-            showgrid=True,
-            gridcolor='rgba(255,255,255,0.05)',
-            showline=False,
-            title="",
-            tickfont=dict(size=11, color='#8B95A6')
-        ),
-        hovermode='x unified',
-        legend=dict(
-            orientation="h",
-            yanchor="top",
-            y=1.05,
-            xanchor="left",
-            x=0,
-            font=dict(size=11, color='#8B95A6')
+    with col_chart1:
+        chart_title = "**Monthly Bribes Distribution**" if not st.session_state.show_percentage_bribes else "**Monthly Bribes Distribution (%)**"
+        st.markdown(chart_title)
+        
+        fig1 = go.Figure()
+        
+        # Calculate percentages if toggle is on
+        if st.session_state.show_percentage_bribes:
+            row_sums = pivot_incentives.sum(axis=1)
+            # Avoid division by zero
+            pivot_incentives_pct = pivot_incentives.div(row_sums.replace(0, 1), axis=0) * 100
+            # Set to 0 where row sum was 0
+            pivot_incentives_pct.loc[row_sums == 0] = 0
+            pivot_incentives_display = pivot_incentives_pct
+            yaxis_title = "Percentage (%)"
+        else:
+            pivot_incentives_display = pivot_incentives
+            yaxis_title = ""
+        
+        for category in pivot_incentives_display.columns:
+            # Format hover template based on view mode
+            if st.session_state.show_percentage_bribes:
+                hovertemplate = f'<b>{category}</b><br>%{{x|%b %Y}}<br>%{{y:,.2f}}%<extra></extra>'
+            else:
+                hovertemplate = f'<b>{category}</b><br>%{{x|%b %Y}}<br>$%{{y:,.0f}}<extra></extra>'
+            
+            fig1.add_trace(go.Scatter(
+                x=pivot_incentives_display.index,
+                y=pivot_incentives_display[category],
+                mode='lines',
+                name=category,
+                line=dict(color=colors.get(category, '#3498db'), width=1.5),
+                stackgroup='one',
+                hovertemplate=hovertemplate
+            ))
+        
+        fig1.update_layout(
+            template='plotly_dark',
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(0,0,0,0)',
+            height=400,
+            margin=dict(l=40, r=20, t=20, b=40),
+            xaxis=dict(
+                showgrid=False,
+                showline=True,
+                linecolor='rgba(255,255,255,0.1)',
+                title="",
+                tickfont=dict(size=11, color='#8B95A6')
+            ),
+            yaxis=dict(
+                showgrid=True,
+                gridcolor='rgba(255,255,255,0.05)',
+                showline=False,
+                title=yaxis_title,
+                tickfont=dict(size=11, color='#8B95A6'),
+                tickformat='.2f' if st.session_state.show_percentage_bribes else ',.0f',
+                ticksuffix='%' if st.session_state.show_percentage_bribes else ''
+            ),
+            hovermode='x unified',
+            legend=dict(
+                orientation="h",
+                yanchor="top",
+                y=1.05,
+                xanchor="left",
+                x=0,
+                font=dict(size=11, color='#8B95A6')
+            )
         )
-    )
-    
-    st.plotly_chart(fig1, use_container_width=True, key="monthly_incentives")
+        
+        st.plotly_chart(fig1, use_container_width=True, key="monthly_incentives")
 
-with col_chart2:
-    st.markdown("**Monthly DAO Profit by Category**")
-    
-    fig2 = go.Figure()
-    
-    for category in pivot_profit.columns:
-        fig2.add_trace(go.Scatter(
-            x=pivot_profit.index,
-            y=pivot_profit[category],
-            mode='lines',
-            name=category,
-            line=dict(color=colors.get(category, '#3498db'), width=1.5)
-        ))
-    
-    fig2.add_hline(y=0, line_dash="dash", line_color="rgba(255,255,255,0.3)", line_width=1)
-    
-    fig2.update_layout(
-        template='plotly_dark',
-        paper_bgcolor='rgba(0,0,0,0)',
-        plot_bgcolor='rgba(0,0,0,0)',
-        height=400,
-        margin=dict(l=40, r=20, t=20, b=40),
-        xaxis=dict(
-            showgrid=False,
-            showline=True,
-            linecolor='rgba(255,255,255,0.1)',
-            title="",
-            tickfont=dict(size=11, color='#8B95A6')
-        ),
-        yaxis=dict(
-            showgrid=True,
-            gridcolor='rgba(255,255,255,0.05)',
-            showline=False,
-            title="",
-            tickfont=dict(size=11, color='#8B95A6')
-        ),
-        hovermode='x unified',
-        legend=dict(
-            orientation="h",
-            yanchor="top",
-            y=1.05,
-            xanchor="left",
-            x=0,
-            font=dict(size=11, color='#8B95A6')
+    with col_chart2:
+        st.markdown("**Monthly DAO Profit by Category**")
+        
+        fig2 = go.Figure()
+        
+        for category in pivot_profit.columns:
+            fig2.add_trace(go.Scatter(
+                x=pivot_profit.index,
+                y=pivot_profit[category],
+                mode='lines',
+                name=category,
+                line=dict(color=colors.get(category, '#3498db'), width=1.5)
+            ))
+        
+        fig2.add_hline(y=0, line_dash="dash", line_color="rgba(255,255,255,0.3)", line_width=1)
+        
+        fig2.update_layout(
+            template='plotly_dark',
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(0,0,0,0)',
+            height=400,
+            margin=dict(l=40, r=20, t=20, b=40),
+            xaxis=dict(
+                showgrid=False,
+                showline=True,
+                linecolor='rgba(255,255,255,0.1)',
+                title="",
+                tickfont=dict(size=11, color='#8B95A6')
+            ),
+            yaxis=dict(
+                showgrid=True,
+                gridcolor='rgba(255,255,255,0.05)',
+                showline=False,
+                title="",
+                tickfont=dict(size=11, color='#8B95A6')
+            ),
+            hovermode='x unified',
+            legend=dict(
+                orientation="h",
+                yanchor="top",
+                y=1.05,
+                xanchor="left",
+                x=0,
+                font=dict(size=11, color='#8B95A6')
+            )
         )
-    )
-    
-    st.plotly_chart(fig2, use_container_width=True, key="monthly_profit")
+        
+        st.plotly_chart(fig2, use_container_width=True, key="monthly_profit")
 
 # Show detailed pool analysis when filtering by Top 20 or Worst 20
 if st.session_state.pool_filter_mode_class in ['top20', 'worst20']:
@@ -329,32 +446,43 @@ if st.session_state.pool_filter_mode_class in ['top20', 'worst20']:
             with st.expander(f"{pool} ({category})"):
                 col_p1, col_p2, col_p3 = st.columns(3)
                 col_p1.metric("Total Revenue", f"${total_rev:,.0f}")
-                col_p2.metric("Total Incentives", f"${total_inc:,.0f}")
+                col_p2.metric("Total Bribes", f"${total_inc:,.0f}")
                 col_p3.metric("DAO Profit", f"${total_profit:,.0f}")
                 
-                pool_daily = pool_data.groupby('block_date').agg({
-                    'protocol_fee_amount_usd': 'sum',
-                    'direct_incentives': 'sum',
-                    'dao_profit_usd': 'sum'
-                }).reset_index()
+                # Ensure block_date is datetime before grouping
+                pool_data_copy = pool_data.copy()
+                if 'block_date' in pool_data_copy.columns:
+                    if not pd.api.types.is_datetime64_any_dtype(pool_data_copy['block_date']):
+                        pool_data_copy['block_date'] = pd.to_datetime(pool_data_copy['block_date'], errors='coerce')
+                    pool_data_copy = pool_data_copy[pool_data_copy['block_date'].notna()]
                 
-                fig_pool = go.Figure()
-                fig_pool.add_trace(go.Scatter(
-                    x=pool_daily['block_date'],
-                    y=pool_daily['protocol_fee_amount_usd'],
-                    mode='lines',
-                    name='Revenue',
-                    line=dict(color='#67A2E1', width=1.5)
-                ))
-                fig_pool.add_trace(go.Scatter(
-                    x=pool_daily['block_date'],
-                    y=pool_daily['dao_profit_usd'],
-                    mode='lines',
-                    name='DAO Profit',
-                    line=dict(color='#2ecc71', width=1.5)
-                ))
+                if not pool_data_copy.empty:
+                    pool_daily = pool_data_copy.groupby('block_date').agg({
+                        'protocol_fee_amount_usd': 'sum',
+                        'direct_incentives': 'sum',
+                        'dao_profit_usd': 'sum'
+                    }).reset_index()
+                else:
+                    pool_daily = pd.DataFrame(columns=['block_date', 'protocol_fee_amount_usd', 'direct_incentives', 'dao_profit_usd'])
                 
-                fig_pool.update_layout(
+                if not pool_daily.empty:
+                    fig_pool = go.Figure()
+                    fig_pool.add_trace(go.Scatter(
+                        x=pool_daily['block_date'],
+                        y=pool_daily['protocol_fee_amount_usd'],
+                        mode='lines',
+                        name='Revenue',
+                        line=dict(color='#67A2E1', width=1.5)
+                    ))
+                    fig_pool.add_trace(go.Scatter(
+                        x=pool_daily['block_date'],
+                        y=pool_daily['dao_profit_usd'],
+                        mode='lines',
+                        name='DAO Profit',
+                        line=dict(color='#2ecc71', width=1.5)
+                    ))
+                    
+                    fig_pool.update_layout(
                     template='plotly_dark',
                     paper_bgcolor='rgba(0,0,0,0)',
                     plot_bgcolor='rgba(0,0,0,0)',
@@ -383,6 +511,8 @@ if st.session_state.pool_filter_mode_class in ['top20', 'worst20']:
                         x=0,
                         font=dict(size=10, color='#8B95A6')
                     )
-                )
-                
-                st.plotly_chart(fig_pool, use_container_width=True, key=f"pool_class_{idx}_{hash(pool)}")
+                    )
+                    
+                    st.plotly_chart(fig_pool, use_container_width=True, key=f"pool_class_{idx}_{hash(pool)}")
+                else:
+                    st.info("No valid date data available for this pool.")
