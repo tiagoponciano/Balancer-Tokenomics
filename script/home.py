@@ -204,18 +204,22 @@ else:
         else:
             df_display['block_date'] = pd.to_datetime(df_display['block_date']).dt.normalize()
     
-    # Filter rows with valid block_date and group by date
+    # Filter rows with valid block_date and group by month
     df_with_block_date = df_display[df_display['block_date'].notna()].copy()
     
     if len(df_with_block_date) > 0:
-        df_daily = df_with_block_date.groupby('block_date').agg({
+        # Create month column for grouping
+        df_with_block_date['year_month'] = df_with_block_date['block_date'].dt.to_period('M').dt.to_timestamp()
+        
+        # Group by month
+        df_monthly = df_with_block_date.groupby('year_month').agg({
             'sim_dao_revenue': 'sum',
             'sim_holders_revenue': 'sum',
             'sim_incentives_revenue': 'sum'
         }).reset_index()
         
         # Check if we have any data after grouping
-        if df_daily.empty or (df_daily['sim_dao_revenue'].sum() == 0 and df_daily['sim_holders_revenue'].sum() == 0 and df_daily['sim_incentives_revenue'].sum() == 0):
+        if df_monthly.empty or (df_monthly['sim_dao_revenue'].sum() == 0 and df_monthly['sim_holders_revenue'].sum() == 0 and df_monthly['sim_incentives_revenue'].sum() == 0):
             st.info("No revenue data available for the selected period.")
         else:
             col_chart1, col_chart2, col_chart3 = st.columns(3)
@@ -224,8 +228,8 @@ else:
                 st.markdown("**DAO Revenue**")
                 fig_dao = go.Figure()
                 fig_dao.add_trace(go.Bar(
-                    x=df_daily['block_date'],
-                    y=df_daily['sim_dao_revenue'],
+                    x=df_monthly['year_month'],
+                    y=df_monthly['sim_dao_revenue'],
                     name='DAO',
                     marker_color='#67A2E1'
                 ))
@@ -258,8 +262,8 @@ else:
                 st.markdown("**Holders Revenue**")
                 fig_holders = go.Figure()
                 fig_holders.add_trace(go.Bar(
-                    x=df_daily['block_date'],
-                    y=df_daily['sim_holders_revenue'],
+                    x=df_monthly['year_month'],
+                    y=df_monthly['sim_holders_revenue'],
                     name='Holders',
                     marker_color='#E9A97B'
                 ))
@@ -292,8 +296,8 @@ else:
                 st.markdown("**Incentives Revenue**")
                 fig_incentives = go.Figure()
                 fig_incentives.add_trace(go.Bar(
-                    x=df_daily['block_date'],
-                    y=df_daily['sim_incentives_revenue'],
+                    x=df_monthly['year_month'],
+                    y=df_monthly['sim_incentives_revenue'],
                     name='Incentives',
                     marker_color='#B1ACF1'
                 ))
@@ -321,6 +325,104 @@ else:
                     showlegend=False
                 )
                 st.plotly_chart(fig_incentives, use_container_width=True, key="incentives_revenue")
+
+st.markdown("---")
+
+st.markdown("### 📊 Comparison")
+
+# Group data by month for monthly comparison
+if df_display.empty or 'block_date' not in df_display.columns:
+    st.warning("No data available for comparison chart.")
+else:
+    # Ensure simulation columns exist
+    required_cols = ['sim_dao_revenue', 'sim_holders_revenue']
+    for col in required_cols:
+        if col not in df_display.columns:
+            df_display[col] = 0.0
+    
+    # Fill NaN values with 0
+    df_display['sim_dao_revenue'] = df_display['sim_dao_revenue'].fillna(0)
+    df_display['sim_holders_revenue'] = df_display['sim_holders_revenue'].fillna(0)
+    
+    # Ensure block_date is datetime
+    if 'block_date' in df_display.columns:
+        if not pd.api.types.is_datetime64_any_dtype(df_display['block_date']):
+            df_display['block_date'] = pd.to_datetime(df_display['block_date'], format='mixed', utc=True, errors='coerce')
+            df_display['block_date'] = pd.to_datetime(df_display['block_date']).dt.normalize()
+        else:
+            df_display['block_date'] = pd.to_datetime(df_display['block_date']).dt.normalize()
+    
+    # Filter rows with valid block_date
+    df_with_dates = df_display[df_display['block_date'].notna()].copy()
+    
+    if len(df_with_dates) > 0:
+        # Create month column for grouping
+        df_with_dates['year_month'] = df_with_dates['block_date'].dt.to_period('M').dt.to_timestamp()
+        
+        # Group by month
+        df_monthly = df_with_dates.groupby('year_month').agg({
+            'sim_dao_revenue': 'sum',
+            'sim_holders_revenue': 'sum'
+        }).reset_index()
+        
+        # Check if we have data
+        if df_monthly.empty or (df_monthly['sim_dao_revenue'].sum() == 0 and df_monthly['sim_holders_revenue'].sum() == 0):
+            st.info("No revenue data available for comparison.")
+        else:
+            # Create comparison bar chart
+            fig_comparison = go.Figure()
+            
+            # Add DAO Revenue bars
+            fig_comparison.add_trace(go.Bar(
+                x=df_monthly['year_month'],
+                y=df_monthly['sim_dao_revenue'],
+                name='DAO Revenue',
+                marker_color='#67A2E1'
+            ))
+            
+            # Add Holders (veBAL) Revenue bars
+            fig_comparison.add_trace(go.Bar(
+                x=df_monthly['year_month'],
+                y=df_monthly['sim_holders_revenue'],
+                name='veBAL Revenue',
+                marker_color='#E9A97B'
+            ))
+            
+            fig_comparison.update_layout(
+                template='plotly_dark',
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(0,0,0,0)',
+                height=400,
+                margin=dict(l=40, r=20, t=20, b=40),
+                xaxis=dict(
+                    showgrid=False,
+                    showline=True,
+                    linecolor='rgba(255,255,255,0.1)',
+                    title="",
+                    tickfont=dict(size=11, color='#8B95A6')
+                ),
+                yaxis=dict(
+                    showgrid=True,
+                    gridcolor='rgba(255,255,255,0.05)',
+                    showline=False,
+                    title="",
+                    tickfont=dict(size=11, color='#8B95A6')
+                ),
+                hovermode='x unified',
+                barmode='group',  # Grouped bars for comparison
+                legend=dict(
+                    orientation="h",
+                    yanchor="top",
+                    y=1.05,
+                    xanchor="left",
+                    x=0,
+                    font=dict(size=11, color='#8B95A6')
+                )
+            )
+            
+            st.plotly_chart(fig_comparison, use_container_width=True, key="revenue_comparison")
+    else:
+        st.info("No data with valid dates available for comparison.")
 
 st.markdown("---")
 
