@@ -941,11 +941,64 @@ def inject_css():
             box-shadow: 0 0 0 3px rgba(103, 162, 225, 0.35), 0 4px 16px rgba(103, 162, 225, 0.2) !important;
         }
         
-        /* Sidebar single selectbox (Year/Quarter): center the displayed value, keep chevron on the right */
+        /* --- SIDEBAR DATE FILTER (Year/Quarter): same brightness & animation as Pool Selection (Top 20) --- */
         section[data-testid="stSidebar"] div[data-baseweb="select"]:not(:has(span[role="listbox"] > span)) > div:first-child {
+            background: linear-gradient(135deg, rgba(103, 162, 225, 0.18) 0%, rgba(103, 162, 225, 0.08) 100%) !important;
+            border: 1.5px solid rgba(103, 162, 225, 0.45) !important;
+            box-shadow: 0 3px 12px rgba(103, 162, 225, 0.15) !important;
+            border-radius: 12px !important;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+            position: relative !important;
+            overflow: hidden !important;
             display: flex !important;
             align-items: center !important;
             cursor: pointer !important;
+        }
+        section[data-testid="stSidebar"] div[data-baseweb="select"]:not(:has(span[role="listbox"] > span)) > div:first-child::before {
+            content: '' !important;
+            position: absolute !important;
+            top: 0 !important;
+            left: -100% !important;
+            width: 100% !important;
+            height: 100% !important;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.15), transparent) !important;
+            transition: left 0.6s ease !important;
+            pointer-events: none !important;
+        }
+        section[data-testid="stSidebar"] div[data-baseweb="select"]:not(:has(span[role="listbox"] > span)) > div:first-child::after {
+            content: '' !important;
+            position: absolute !important;
+            inset: 0 !important;
+            border-radius: 12px !important;
+            padding: 1.5px !important;
+            background: linear-gradient(135deg, rgba(103, 162, 225, 0.6), rgba(103, 162, 225, 0.2)) !important;
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0) !important;
+            -webkit-mask-composite: xor !important;
+            mask-composite: exclude !important;
+            opacity: 0 !important;
+            transition: opacity 0.3s !important;
+            pointer-events: none !important;
+        }
+        section[data-testid="stSidebar"] div[data-baseweb="select"]:not(:has(span[role="listbox"] > span)) > div:first-child:hover {
+            background: linear-gradient(135deg, rgba(103, 162, 225, 0.28) 0%, rgba(103, 162, 225, 0.15) 100%) !important;
+            border-color: rgba(103, 162, 225, 0.7) !important;
+            transform: translateY(-3px) scale(1.02) !important;
+            box-shadow: 0 6px 20px rgba(103, 162, 225, 0.3) !important;
+        }
+        section[data-testid="stSidebar"] div[data-baseweb="select"]:not(:has(span[role="listbox"] > span)) > div:first-child:hover::before {
+            left: 100% !important;
+        }
+        section[data-testid="stSidebar"] div[data-baseweb="select"]:not(:has(span[role="listbox"] > span)) > div:first-child:hover::after {
+            opacity: 1 !important;
+        }
+        section[data-testid="stSidebar"] div[data-baseweb="select"]:not(:has(span[role="listbox"] > span)) > div:first-child:focus,
+        section[data-testid="stSidebar"] div[data-baseweb="select"]:not(:has(span[role="listbox"] > span)) > div:first-child:focus-within {
+            box-shadow: 0 0 0 3px rgba(103, 162, 225, 0.35), 0 6px 20px rgba(103, 162, 225, 0.3) !important;
+        }
+        /* Date Filter: same "pulo" (active) as Pool Selection when clicking */
+        section[data-testid="stSidebar"] div[data-baseweb="select"]:not(:has(span[role="listbox"] > span)) > div:first-child:active {
+            transform: translateY(-1px) scale(1.01) !important;
+            box-shadow: 0 3px 12px rgba(103, 162, 225, 0.2) !important;
         }
         section[data-testid="stSidebar"] div[data-baseweb="select"]:not(:has(span[role="listbox"] > span)) > div:first-child > div:first-child {
             flex: 1 !important;

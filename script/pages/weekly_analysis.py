@@ -153,6 +153,13 @@ else:
     # 'all' mode - show everything
     df_display = df_sim.copy()
 
+if 'pool_category' not in df_display.columns:
+    df_display['pool_category'] = 'Undefined'
+else:
+    df_display['pool_category'] = df_display['pool_category'].fillna('Undefined').astype(str)
+if 'direct_incentives' not in df_display.columns:
+    df_display['direct_incentives'] = 0.0
+
 df_display['week'] = df_display['block_date'].dt.to_period('W').dt.start_time
 
 df_weekly = df_display.groupby(['week', 'pool_category']).agg({
