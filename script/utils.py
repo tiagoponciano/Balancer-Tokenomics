@@ -236,6 +236,12 @@ def inject_css():
         section[data-testid="stSidebar"] hr {
             margin: 0.4rem 0 !important;
         }
+        /* Saltinho on page change: same entrance animation for Date Filter as sidebar buttons */
+        @keyframes sidebarSaltinho {
+            0%   { transform: translateY(0) scale(1); }
+            40%  { transform: translateY(-2px) scale(1.01); }
+            100% { transform: translateY(0) scale(1); }
+        }
         /* Date Filter: Year & Quarter — same color/weight as Top 20, keep default font-size */
         section[data-testid="stSidebar"] div[data-testid="stVerticalBlock"]:has(div[data-baseweb="select"]:not(:has(span[role="listbox"] > span))) p,
         section[data-testid="stSidebar"] div[data-testid="stVerticalBlock"]:has(div[data-baseweb="select"]:not(:has(span[role="listbox"] > span))) label {
@@ -953,6 +959,7 @@ def inject_css():
             display: flex !important;
             align-items: center !important;
             cursor: pointer !important;
+            animation: sidebarSaltinho 0.35s ease-out both !important;
         }
         section[data-testid="stSidebar"] div[data-baseweb="select"]:not(:has(span[role="listbox"] > span)) > div:first-child::before {
             content: '' !important;
