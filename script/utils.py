@@ -1265,209 +1265,210 @@ def show_pool_filters(session_key='pool_filter_mode', on_change_callback=None):
                 on_change_callback()
             st.rerun()
 
+# Primary data source: Aleluia.csv (merge of financial + votes). Fallback: balancer_v2_merged / master.
+ALELUIA_FILENAME = 'Aleluia.csv'
+BAL_EMISSIONS_FILENAME = 'BAL_Emissions_by_GaugePool.csv'
+
+
+@st.cache_data
+def load_bal_emissions_daily():
+    """
+    Load BAL_Emissions_by_GaugePool.csv and compute daily direct_incentives (round_emissions_usd / duration).
+    Returns DataFrame with columns: blockchain, project_contract_address, block_date, direct_incentives.
+    """
+    df = load_aggregated_csv(BAL_EMISSIONS_FILENAME)
+    if df is None or df.empty:
+        return pd.DataFrame()
+    for c in ['start_date', 'end_date', 'blockchain', 'pool_address', 'round_emissions_usd']:
+        if c not in df.columns:
+            return pd.DataFrame()
+    df = df.copy()
+    df['start_date'] = pd.to_datetime(df['start_date'], errors='coerce')
+    df['end_date'] = pd.to_datetime(df['end_date'], errors='coerce')
+    df['round_emissions_usd'] = pd.to_numeric(df['round_emissions_usd'], errors='coerce').fillna(0)
+    df = df.dropna(subset=['start_date', 'end_date', 'blockchain'])
+    df = df[df['pool_address'].notna() & (df['pool_address'].astype(str).str.strip() != '')].copy()
+    df['duration_days'] = (df['end_date'] - df['start_date']).dt.days
+    df.loc[df['duration_days'] < 1, 'duration_days'] = 1
+    df['daily_incentive_usd'] = df['round_emissions_usd'] / df['duration_days']
+    df['project_contract_address'] = df['pool_address'].astype(str).str.strip().str.lower()
+    rows = []
+    for _, r in df.iterrows():
+        try:
+            for d in pd.date_range(r['start_date'], r['end_date'], inclusive='left'):
+                rows.append({
+                    'blockchain': r['blockchain'],
+                    'project_contract_address': r['project_contract_address'],
+                    'block_date': d,
+                    'direct_incentives': r['daily_incentive_usd'],
+                })
+        except Exception:
+            continue
+    if not rows:
+        return pd.DataFrame()
+    out = pd.DataFrame(rows)
+    out = out.groupby(['blockchain', 'project_contract_address', 'block_date'], as_index=False)['direct_incentives'].sum()
+    return out
+
+
+def _process_aleluia_data(df):
+    """
+    Process Aleluia.csv for Streamlit: align types, merge direct_incentives from BAL_Emissions,
+    compute dao_profit_usd, emissions_roi, then classify_pools. Aleluia has: blockchain, project,
+    version, block_date, project_contract_address, pool_symbol, pool_type, swap_amount_usd, tvl_usd,
+    tvl_eth, total_protocol_fee_usd, protocol_fee_amount_usd, swap_fee_usd, yield_fee_usd, swap_fee_%,
+    core_non_core (0/1), bal_emited_votes, votes_received.
+    """
+    if df is None or df.empty:
+        return df
+    df = df.copy()
+    if 'block_date' in df.columns:
+        df['block_date'] = pd.to_datetime(df['block_date'], errors='coerce')
+    numeric_cols = [
+        'swap_amount_usd', 'tvl_usd', 'tvl_eth',
+        'total_protocol_fee_usd', 'protocol_fee_amount_usd',
+        'swap_fee_usd', 'yield_fee_usd', 'swap_fee_%',
+        'bal_emited_votes', 'votes_received',
+    ]
+    for col in numeric_cols:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+    df['is_core_pool'] = pd.to_numeric(df.get('core_non_core', 0), errors='coerce').fillna(0).astype(int)
+    df['project_contract_address_norm'] = df['project_contract_address'].astype(str).str.strip().str.lower()
+    df_inc = load_bal_emissions_daily()
+    if not df_inc.empty:
+        df_inc = df_inc.rename(columns={'block_date': '_inc_date'})
+        df_inc['project_contract_address_norm'] = df_inc['project_contract_address'].astype(str).str.strip().str.lower()
+        # Use date string for merge to avoid datetime64[ns, UTC] vs datetime64[ns] mismatch
+        df['_date_only'] = pd.to_datetime(df['block_date'], errors='coerce').dt.strftime('%Y-%m-%d')
+        df_inc['_date_only'] = pd.to_datetime(df_inc['_inc_date'], errors='coerce').dt.strftime('%Y-%m-%d')
+        df = df.merge(
+            df_inc[['blockchain', 'project_contract_address_norm', '_date_only', 'direct_incentives']],
+            on=['blockchain', 'project_contract_address_norm', '_date_only'],
+            how='left',
+        )
+        df = df.drop(columns=['_date_only', 'project_contract_address_norm'], errors='ignore')
+        df['direct_incentives'] = pd.to_numeric(df['direct_incentives'], errors='coerce').fillna(0)
+    else:
+        df['direct_incentives'] = 0.0
+        df = df.drop(columns=['project_contract_address_norm'], errors='ignore')
+    rev = df['protocol_fee_amount_usd'] if 'protocol_fee_amount_usd' in df.columns else 0
+    inc = df['direct_incentives']
+    df['dao_profit_usd'] = rev - inc
+    df['emissions_roi'] = np.where(inc > 0, rev / inc, 0.0)
+    return classify_pools(df)
+
+
+def _process_merged_data(df):
+    """Process balancer_v2_merged (or master) for Streamlit: align columns, Legitimate/Mercenary via classify_pools."""
+    if df is None or df.empty:
+        return df
+    df = df.copy()
+    if 'block_date' in df.columns:
+        df['block_date'] = pd.to_datetime(df['block_date'], errors='coerce')
+    numeric_cols = [
+        'swap_amount_usd', 'tvl_usd', 'tvl_eth',
+        'total_protocol_fee_usd', 'protocol_fee_amount_usd',
+        'swap_fee_usd', 'yield_fee_usd', 'swap_fee_%',
+        'bal_emited_votes', 'votes_received', 'direct_incentives'
+    ]
+    for col in numeric_cols:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+    if 'direct_incentives' not in df.columns:
+        df['direct_incentives'] = 0.0
+    if 'core_non_core' in df.columns:
+        df['is_core_pool'] = pd.to_numeric(df['core_non_core'], errors='coerce').fillna(0).astype(int)
+    else:
+        df['is_core_pool'] = 0
+    rev = df['protocol_fee_amount_usd'] if 'protocol_fee_amount_usd' in df.columns else 0
+    inc = df['direct_incentives']
+    df['dao_profit_usd'] = rev - inc
+    df['emissions_roi'] = np.where(inc > 0, rev / inc, 0.0)
+    df = classify_pools(df)
+    return df
+
+
 @st.cache_data
 def load_data():
-    """Load main financial data from Supabase Storage or local filesystem"""
+    """Load main data: Aleluia.csv first (single source). Fallback: balancer_v2_merged.csv, balancer_v2_master.csv."""
     try:
-        # First, try to download from Supabase
-        df = download_csv_from_supabase('balancer_v2_financial_master_final.csv')
+        df = download_csv_from_supabase(ALELUIA_FILENAME)
         if df is not None and not df.empty:
-            # Process the data
-            if 'block_date' in df.columns:
-                df['block_date'] = pd.to_datetime(df['block_date'], errors='coerce')
-            
-            numeric_cols = [
-                'protocol_fee_amount_usd',
-                'total_protocol_fee_usd',
-                'direct_incentives',
-                'dao_profit_usd',
-                'bal_emited_votes',
-                'votes_received',
-                'emissions_roi',
-                'is_core_pool'
-            ]
-            
-            for col in numeric_cols:
-                if col in df.columns:
-                    df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
-            
-            if 'is_core_pool' in df.columns:
-                df['is_core_pool'] = df['is_core_pool'].astype(int)
-            
-            if 'pool_category' not in df.columns:
-                df = classify_pools(df)
-            
-            return df
-        
-        # Fallback to local filesystem
-        # Get current working directory (where streamlit is run from)
+            return _process_aleluia_data(df)
+
         cwd = os.getcwd()
-        
-        # Try to get script directory
         try:
             script_dir = os.path.dirname(os.path.abspath(__file__))
             project_root = os.path.dirname(script_dir)
-        except:
+        except Exception:
             script_dir = cwd
             project_root = os.path.dirname(cwd) if os.path.basename(cwd) == 'script' else cwd
-        
-        # Build possible data directories
+
         possible_data_dirs = [
             os.path.join(project_root, 'data'),
             os.path.join(cwd, 'data'),
             os.path.join(cwd, '..', 'data'),
             os.path.join(script_dir, 'data'),
-            'data'
+            'data',
         ]
-        
-        # Try different possible file names and paths
-        # Priority: ../data/ (most likely when running from script/)
-        file_paths = [
-            os.path.abspath(os.path.join(cwd, '..', 'data', 'balancer_v2_financial_master_final.csv')),  # ../data/ - MOST LIKELY
-        ]
-        # Then try other data directories
         for data_dir in possible_data_dirs:
-            abs_data_dir = os.path.abspath(data_dir)
-            file_paths.extend([
-                os.path.join(abs_data_dir, 'balancer_v2_financial_master_final.csv'),
-                os.path.join(abs_data_dir, 'balancer_v2_best_pools.csv'),
-            ])
-        # Also try relative to current directory
-        file_paths.extend([
-            os.path.join(cwd, 'balancer_v2_financial_master_final.csv'),
-            'data/balancer_v2_financial_master_final.csv',
-            'balancer_v2_financial_master_final.csv'
-        ])
-        
+            path = os.path.join(os.path.abspath(data_dir), ALELUIA_FILENAME)
+            if os.path.exists(path) and os.path.getsize(path) > 100:
+                df = pd.read_csv(path)
+                if df is not None and not df.empty:
+                    return _process_aleluia_data(df)
+
+        filenames = ['balancer_v2_merged.csv', 'balancer_v2_master.csv']
         df = None
-        found_path = None
+        for fn in filenames:
+            df = download_csv_from_supabase(fn)
+            if df is not None and not df.empty:
+                break
+        if df is not None and not df.empty:
+            return _process_merged_data(df)
+
+        file_paths = []
+        for data_dir in possible_data_dirs:
+            abs_d = os.path.abspath(data_dir)
+            for fn in filenames:
+                file_paths.append(os.path.join(abs_d, fn))
+        file_paths.extend([
+            os.path.abspath(os.path.join(cwd, '..', 'data', 'balancer_v2_merged.csv')),
+            os.path.join(cwd, 'data', 'balancer_v2_merged.csv'),
+            'data/balancer_v2_merged.csv',
+            'data/balancer_v2_master.csv',
+        ])
+        df = None
         for path in file_paths:
             try:
-                # Normalize path
-                if not os.path.isabs(path):
-                    abs_path = os.path.abspath(path)
-                else:
-                    abs_path = path
-                
-                # Check if file exists and has content
-                if os.path.exists(abs_path) and os.path.getsize(abs_path) > 100:  # At least 100 bytes
+                abs_path = os.path.abspath(path) if not os.path.isabs(path) else path
+                if os.path.exists(abs_path) and os.path.getsize(abs_path) > 100:
                     df = pd.read_csv(abs_path)
                     if df is not None and not df.empty:
-                        found_path = abs_path
-                        break
-            except (FileNotFoundError, pd.errors.EmptyDataError, pd.errors.ParserError, Exception) as e:
+                        return _process_merged_data(df)
+            except Exception:
                 continue
-        
-        if df is None or df.empty:
-            error_msg = st.error("❌ CSV file not found or is empty.")
-            with st.expander("🔍 Debug Info - Click to see details"):
-                # Supabase Configuration Info
-                st.write("### 🔐 Supabase Configuration")
-                supabase_configured = bool(SUPABASE_URL)
-                st.write(f"**Supabase URL configured:** {'✅ Yes' if supabase_configured else '❌ No'}")
-                if supabase_configured:
-                    st.write(f"**Supabase URL:** `{SUPABASE_URL}`")
-                    st.write(f"**Bucket name:** `{SUPABASE_BUCKET}`")
-                    
-                    # Check which key is being used
-                    has_service_key = bool(SUPABASE_SERVICE_KEY)
-                    has_anon_key = bool(SUPABASE_ANON_KEY)
-                    if has_service_key:
-                        st.write(f"**Authentication:** ✅ Using SERVICE_KEY (for private buckets)")
-                        key_preview = SUPABASE_SERVICE_KEY[:20] + "..." if len(SUPABASE_SERVICE_KEY) > 20 else SUPABASE_SERVICE_KEY
-                        st.write(f"**Service Key preview:** `{key_preview}`")
-                    elif has_anon_key:
-                        st.write(f"**Authentication:** ⚠️ Using ANON_KEY (for public buckets)")
-                        key_preview = SUPABASE_ANON_KEY[:20] + "..." if len(SUPABASE_ANON_KEY) > 20 else SUPABASE_ANON_KEY
-                        st.write(f"**Anon Key preview:** `{key_preview}`")
-                    else:
-                        st.write(f"**Authentication:** ❌ No keys configured")
-                    
-                    # Try to get error from Supabase
-                    st.write("\n### 📥 Supabase Download Attempt")
-                    df_supabase, error = download_csv_from_supabase('balancer_v2_financial_master_final.csv', return_error=True)
-                    if df_supabase is not None and not df_supabase.empty:
-                        st.write("✅ **File downloaded successfully from Supabase!**")
-                        st.write(f"**Rows:** {len(df_supabase)}")
-                        st.write(f"**Columns:** {', '.join(df_supabase.columns[:5].tolist())}...")
-                    else:
-                        st.write("❌ **Failed to download from Supabase**")
-                        if error:
-                            st.write(f"**Error:** `{error}`")
-                        else:
-                            st.write("**Error:** File not found in Supabase Storage")
-                        
-                        # Try to list files in bucket
-                        try:
-                            supabase = get_supabase_client()
-                            if supabase:
-                                st.write("\n**Attempting to list files in bucket...**")
-                                files = supabase.storage.from_(SUPABASE_BUCKET).list()
-                                if files:
-                                    st.write(f"**Files found in bucket `{SUPABASE_BUCKET}`:**")
-                                    for file_info in files[:10]:
-                                        st.write(f"  - {file_info.get('name', 'Unknown')}")
-                                else:
-                                    st.write(f"**No files found in bucket `{SUPABASE_BUCKET}`**")
-                        except Exception as e:
-                            st.write(f"**Could not list files:** `{str(e)}`")
-                
-                st.write("\n### 💾 Local Filesystem")
-                st.write(f"**Current working directory:** `{cwd}`")
-                st.write(f"**Script directory:** `{script_dir}`")
-                st.write(f"**Project root:** `{project_root}`")
-                st.write("**Tried paths:**")
-                for i, path in enumerate(file_paths[:15], 1):
-                    abs_path = os.path.abspath(path)
-                    exists = "✅" if os.path.exists(abs_path) else "❌"
-                    st.write(f"{i}. {exists} `{abs_path}`")
-                # List files in data directory if it exists
-                for data_dir in possible_data_dirs:
-                    abs_data_dir = os.path.abspath(data_dir)
-                    if os.path.exists(abs_data_dir):
-                        st.write(f"\n**Files in `{abs_data_dir}`:**")
-                        try:
-                            files = [f for f in os.listdir(abs_data_dir) if f.endswith('.csv')]
-                            for f in files[:10]:
-                                st.write(f"  - {f}")
-                        except:
-                            pass
-            return pd.DataFrame()
-        
-        if 'block_date' in df.columns:
-            df['block_date'] = pd.to_datetime(df['block_date'], errors='coerce')
-        
-        numeric_cols = [
-            'protocol_fee_amount_usd',
-            'total_protocol_fee_usd',
-            'direct_incentives',
-            'dao_profit_usd',
-            'bal_emited_votes',
-            'votes_received',
-            'emissions_roi',
-            'is_core_pool'
-        ]
-        
-        for col in numeric_cols:
-            if col in df.columns:
-                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
-        
-        if 'is_core_pool' in df.columns:
-            df['is_core_pool'] = df['is_core_pool'].astype(int)
-        
-        if 'pool_category' not in df.columns:
-            df = classify_pools(df)
-        
-        return df
-    
-    except FileNotFoundError:
-        st.error("❌ CSV file not found. Please verify that 'balancer_v2_financial_master_final.csv' is in the correct directory.")
+
+        st.error("❌ Aleluia.csv not found. Ensure it is in the `data/` folder (or balancer_v2_merged.csv as fallback).")
+        with st.expander("🔍 Debug"):
+            st.write(f"**CWD:** `{cwd}`")
+            for d in possible_data_dirs:
+                ad = os.path.abspath(d)
+                if os.path.exists(ad):
+                    st.write(f"**{ad}:** {[f for f in os.listdir(ad) if f.endswith('.csv')][:15]}")
         return pd.DataFrame()
     except Exception as e:
         st.error(f"❌ Error loading data: {str(e)}")
         return pd.DataFrame()
 
 def classify_pools(df):
+    """Build pool_category (Legitimate / Mercenary / Undefined) from dao_profit, revenue, incentives, ROI."""
+    if 'pool_category' in df.columns and df['pool_category'].notna().any():
+        return df
+    required = ['dao_profit_usd', 'protocol_fee_amount_usd', 'direct_incentives', 'emissions_roi', 'is_core_pool']
+    if not all(c in df.columns for c in required):
+        return df
     pool_agg = df.groupby('pool_symbol').agg({
         'dao_profit_usd': 'sum',
         'protocol_fee_amount_usd': 'sum',
@@ -1525,51 +1526,158 @@ def classify_pools(df):
     
     return df
 
+def _normalize_gauge(addr):
+    if pd.isna(addr):
+        return None
+    s = str(addr).strip().lower()
+    if s in ("", "nan"):
+        return None
+    return s
+
+
+def get_votes_by_pool_from_main_df(df):
+    """
+    Build votes-by-pool summary from main dataframe (Aleluia via load_data()).
+    Returns one row per pool with: pool_symbol, votes, pct_votes, ranking, symbol_clean, gauge_address.
+    """
+    if df is None or df.empty:
+        return pd.DataFrame()
+    if 'votes_received' not in df.columns or 'pool_symbol' not in df.columns:
+        return pd.DataFrame()
+    df = df.copy()
+    df['votes_received'] = pd.to_numeric(df['votes_received'], errors='coerce').fillna(0)
+    agg = df.groupby('pool_symbol', as_index=False).agg(
+        votes_received=('votes_received', 'sum'),
+        project_contract_address=('project_contract_address', 'first'),
+    )
+    total = agg['votes_received'].sum()
+    agg['votes'] = agg['votes_received']
+    agg['pct_votes'] = (agg['votes_received'] / total) if total else 0.0
+    agg['ranking'] = agg['votes_received'].rank(method='min', ascending=False).astype(int)
+    agg['symbol_clean'] = agg['pool_symbol'].fillna('').astype(str)
+    agg['symbol'] = agg['pool_symbol']
+    agg['gauge_address'] = agg['project_contract_address'].fillna('').astype(str)
+    agg['gauge'] = agg['gauge_address']
+    return agg
+
+
+@st.cache_data
+def load_vebal_votes_from_premerge():
+    """Legacy: votes from veBAL_pre_merge_2 + balancer_v2_pre_final_merge. Prefer using load_data() + get_votes_by_pool_from_main_df()."""
+    try:
+        cwd = os.getcwd()
+        data_paths = [
+            os.path.abspath(os.path.join(cwd, '..', 'data')),
+            os.path.abspath(os.path.join(cwd, 'data')),
+            os.path.join(cwd, 'data'),
+            'data',
+        ]
+        vebal_path = b2_path = None
+        for d in data_paths:
+            vp = os.path.join(d, 'veBAL_pre_merge_2.csv')
+            bp = os.path.join(d, 'balancer_v2_pre_final_merge.csv')
+            if os.path.exists(vp) and os.path.exists(bp):
+                vebal_path, b2_path = vp, bp
+                break
+        if not vebal_path or not b2_path:
+            return pd.DataFrame(), pd.DataFrame()
+
+        vebal = pd.read_csv(vebal_path)
+        b2 = pd.read_csv(b2_path)
+        if vebal.empty or b2.empty or 'gauge_address' not in vebal.columns or 'gauge_address' not in b2.columns or 'total_votes' not in b2.columns:
+            return pd.DataFrame(), pd.DataFrame()
+
+        vebal['block_date_dt'] = pd.to_datetime(vebal['block_date'], errors='coerce')
+        vebal['_date'] = vebal['block_date_dt'].dt.date
+        vebal['_gauge_norm'] = vebal['gauge_address'].apply(_normalize_gauge)
+        vebal_metrics = vebal.dropna(subset=['_gauge_norm']).drop_duplicates(subset=['_gauge_norm', '_date'], keep='first')
+        vebal_metrics = vebal_metrics[['_gauge_norm', '_date', 'pool_symbol', 'total_protocol_fee_usd']].copy()
+
+        b2['_date'] = pd.to_datetime(b2['day'], errors='coerce').dt.date
+        b2['_gauge_norm'] = b2['gauge_address'].apply(_normalize_gauge)
+        b2 = b2.dropna(subset=['_gauge_norm']).copy()
+
+        merged = b2.merge(vebal_metrics, on=['_gauge_norm', '_date'], how='left')
+        merged['total_votes'] = pd.to_numeric(merged['total_votes'], errors='coerce').fillna(0)
+        merged['pool_symbol'] = merged['pool_symbol'].fillna(merged.get('symbol', pd.Series(dtype=object)))
+
+        latest = merged['_date'].max()
+        sub = merged[merged['_date'] == latest].copy()
+        sub = sub.dropna(subset=['pool_symbol'])
+
+        agg = sub.groupby('pool_symbol', as_index=False).agg(
+            total_votes=('total_votes', 'sum'),
+            gauge_address=('gauge_address', 'first'),
+        )
+        total = agg['total_votes'].sum()
+        agg['votes'] = agg['total_votes']
+        agg['pct_votes'] = (agg['total_votes'] / total) if total else 0.0
+        agg['ranking'] = agg['total_votes'].rank(method='min', ascending=False).astype(int)
+        agg['symbol_clean'] = agg['pool_symbol'].fillna('').astype(str)
+        agg['symbol'] = agg['pool_symbol']
+        g = agg['gauge_address'].fillna('')
+        agg['gauge'] = g
+        agg['gauge_address'] = g.astype(str)
+        df_votes = agg
+
+        df_vebal = vebal.copy()
+        if 'total_protocol_fee_usd' not in df_vebal.columns:
+            df_vebal['total_protocol_fee_usd'] = 0.0
+        return df_votes, df_vebal
+    except Exception:
+        return pd.DataFrame(), pd.DataFrame()
+
+
 @st.cache_data
 def load_vebal_votes_data():
-    """Load veBAL votes data from Supabase Storage or local filesystem"""
+    """Load veBAL votes: veBAL_votes.csv if available, else derive from balancer_v2_merged (load_data)."""
     try:
-        # First, try to download from Supabase
         df_votes = download_csv_from_supabase('veBAL_votes.csv')
         if df_votes is not None and not df_votes.empty:
-            # Convert numeric columns
-            numeric_cols = ['votes', 'pct_votes', 'ranking']
-            for col in numeric_cols:
+            for col in ['votes', 'pct_votes', 'ranking']:
                 if col in df_votes.columns:
                     df_votes[col] = pd.to_numeric(df_votes[col], errors='coerce').fillna(0)
             return df_votes
-        
-        # Fallback to local filesystem
+
         cwd = os.getcwd()
-        file_paths = [
+        for path in [
             os.path.abspath(os.path.join(cwd, '..', 'data', 'veBAL_votes.csv')),
             os.path.abspath(os.path.join(cwd, 'data', 'veBAL_votes.csv')),
             'data/veBAL_votes.csv',
             'veBAL_votes.csv'
-        ]
-        
-        df_votes = None
-        for path in file_paths:
+        ]:
             try:
-                abs_path = os.path.abspath(path) if not os.path.isabs(path) else path
-                if os.path.exists(abs_path) and os.path.getsize(abs_path) > 0:
-                    df_votes = pd.read_csv(abs_path)
+                ap = os.path.abspath(path) if not os.path.isabs(path) else path
+                if os.path.exists(ap) and os.path.getsize(ap) > 0:
+                    df_votes = pd.read_csv(ap)
                     if not df_votes.empty:
-                        break
-            except (FileNotFoundError, pd.errors.EmptyDataError, pd.errors.ParserError, Exception):
+                        for col in ['votes', 'pct_votes', 'ranking']:
+                            if col in df_votes.columns:
+                                df_votes[col] = pd.to_numeric(df_votes[col], errors='coerce').fillna(0)
+                        return df_votes
+            except Exception:
                 continue
-        
-        if df_votes is None or df_votes.empty:
+
+        # Derive from merged (single source)
+        df = load_data()
+        if df.empty or 'votes_received' not in df.columns or 'pool_symbol' not in df.columns:
             return pd.DataFrame()
-        
-        # Convert numeric columns
-        numeric_cols = ['votes', 'pct_votes', 'ranking']
-        for col in numeric_cols:
-            if col in df_votes.columns:
-                df_votes[col] = pd.to_numeric(df_votes[col], errors='coerce').fillna(0)
-        
-        return df_votes
-    except Exception as e:
+        latest = df['block_date'].max()
+        sub = df[df['block_date'] == latest].copy()
+        agg = sub.groupby('pool_symbol', as_index=False).agg(
+            votes_received=('votes_received', 'sum'),
+            project_contract_address=('project_contract_address', 'first'),
+        )
+        total = agg['votes_received'].sum()
+        agg['votes'] = agg['votes_received']
+        agg['pct_votes'] = (agg['votes_received'] / total) if total else 0
+        agg['ranking'] = agg['votes_received'].rank(method='min', ascending=False).astype(int)
+        agg['symbol_clean'] = agg['pool_symbol'].fillna('').astype(str)
+        agg['symbol'] = agg['pool_symbol']
+        agg['gauge'] = agg['project_contract_address'].fillna('')
+        agg['gauge_address'] = agg['project_contract_address'].fillna('').astype(str)
+        return agg
+    except Exception:
         return pd.DataFrame()
 
 @st.cache_data
@@ -1677,11 +1785,17 @@ def load_bribes_data():
         return pd.DataFrame()
 
 def get_top_pools(df, n=20):
-    pool_agg = df.groupby('pool_symbol')['dao_profit_usd'].sum().sort_values(ascending=False).head(n)
+    col = 'total_protocol_fee_usd' if 'total_protocol_fee_usd' in df.columns else 'dao_profit_usd'
+    if col not in df.columns:
+        return []
+    pool_agg = df.groupby('pool_symbol')[col].sum().sort_values(ascending=False).head(n)
     return pool_agg.index.tolist()
 
 def get_worst_pools(df, n=20):
-    pool_agg = df.groupby('pool_symbol')['dao_profit_usd'].sum().sort_values(ascending=True).head(n)
+    col = 'total_protocol_fee_usd' if 'total_protocol_fee_usd' in df.columns else 'dao_profit_usd'
+    if col not in df.columns:
+        return []
+    pool_agg = df.groupby('pool_symbol')[col].sum().sort_values(ascending=True).head(n)
     return pool_agg.index.tolist()
 
 def run_simulation_sidebar(df):

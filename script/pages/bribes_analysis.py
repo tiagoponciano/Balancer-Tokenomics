@@ -20,79 +20,34 @@ utils.inject_css()
 import streamlit.components.v1 as components
 
 try:
-    # Load data - ONLY bribes and veBAL votes
-    df_bribes = utils.load_bribes_data()
-    df_votes = utils.load_vebal_votes_data()  # Load veBAL votes data
-
-    if df_bribes.empty:
-        st.warning("⚠️ Bribes data file not found. Please ensure the bribes CSV file is in the `data/` folder.")
-        st.info("Looking for files like: `data/Balancer_Bribes_Gauges_enriched.csv` or `data/balancer_bribes_gauges_enriched.csv`")
-        st.info("Available files in data/:")
-        import os
-        if os.path.exists('data'):
-            files = [f for f in os.listdir('data') if f.endswith('.csv')]
-            for f in files[:10]:
-                st.text(f"  - {f}")
+    # Bribes page uses balancer_v2_merged only. "Bribes" = direct_incentives (USD); votes = votes_received.
+    df = utils.load_data()
+    if df.empty:
+        st.warning("⚠️ No data. Ensure `balancer_v2_merged.csv` is in `data/`.")
         st.stop()
-    
-    # Merge votes data with bribes data if available
-    if not df_votes.empty and 'gauge_address' in df_bribes.columns:
-        # Clean gauge addresses for matching
-        import re
-        def clean_gauge_address(addr):
-            if pd.isna(addr):
-                return ""
-            addr_str = str(addr)
-            # Remove 0x prefix if present, normalize
-            if addr_str.startswith('0x'):
-                return addr_str.lower().strip()
-            return addr_str.lower().strip()
-        
-        # Extract gauge address from votes data
-        def extract_gauge_from_votes(gauge_str):
-            if pd.isna(gauge_str):
-                return ""
-            gauge_str = str(gauge_str)
-            if gauge_str.startswith('0x'):
-                return gauge_str.lower().strip()
-            return gauge_str.lower().strip()
-        
-        # Clean symbol column in votes data if it doesn't exist
-        def clean_symbol(symbol):
-            """Extract text from HTML links"""
-            if pd.isna(symbol):
-                return ""
-            # Remove HTML tags and extract text
-            text = re.sub(r'<[^>]+>', '', str(symbol))
-            # Remove the ↗ emoji if present
-            text = text.replace('↗', '').strip()
-            return text
-        
-        # Create symbol_clean if it doesn't exist
-        if 'symbol_clean' not in df_votes.columns and 'symbol' in df_votes.columns:
-            df_votes['symbol_clean'] = df_votes['symbol'].apply(clean_symbol)
-        elif 'symbol_clean' not in df_votes.columns:
-            df_votes['symbol_clean'] = ""
-        
-        df_bribes['gauge_address_clean'] = df_bribes['gauge_address'].apply(clean_gauge_address)
-        df_votes['gauge_address_clean'] = df_votes['gauge'].apply(extract_gauge_from_votes)
-        
-        # Prepare columns for merge
-        merge_cols = ['gauge_address_clean', 'votes', 'pct_votes', 'ranking', 'symbol_clean']
-        available_cols = [col for col in merge_cols if col in df_votes.columns]
-        
-        # Merge votes data
-        df_bribes = df_bribes.merge(
-            df_votes[available_cols].rename(columns={
-                'votes': 'vebal_votes',
-                'pct_votes': 'vebal_pct_votes',
-                'ranking': 'vebal_ranking',
-                'symbol_clean': 'vebal_symbol'
-            }),
-            on='gauge_address_clean',
-            how='left'
-        )
-        
+
+    df_bribes = df.copy()
+    df_bribes["gauge_address"] = df_bribes["project_contract_address"].fillna("").astype(str)
+    df_bribes["pool_title"] = df_bribes["pool_symbol"].fillna("")
+    df_bribes["pool_name"] = df_bribes["pool_symbol"].fillna("")
+    df_bribes["vebal_votes"] = df_bribes["votes_received"]
+    latest = df_bribes["block_date"].max()
+    sub = df_bribes[df_bribes["block_date"] == latest]
+    total_v = sub["votes_received"].sum()
+    rank_df = sub.groupby("pool_symbol", as_index=False)["votes_received"].sum()
+    rank_df["vebal_pct_votes"] = (rank_df["votes_received"] / total_v) if total_v else 0
+    rank_df["vebal_ranking"] = rank_df["votes_received"].rank(method="min", ascending=False).astype(int)
+    df_bribes = df_bribes.merge(
+        rank_df[["pool_symbol", "vebal_pct_votes", "vebal_ranking"]].rename(columns={"vebal_pct_votes": "_pct", "vebal_ranking": "_rank"}),
+        on="pool_symbol",
+        how="left",
+    )
+    df_bribes["vebal_pct_votes"] = df_bribes["_pct"].fillna(0)
+    df_bribes["vebal_ranking"] = df_bribes["_rank"]
+    df_bribes = df_bribes.drop(columns=["_pct", "_rank"], errors="ignore")
+
+    df_votes = df[["pool_symbol", "project_contract_address", "votes_received", "block_date"]].drop_duplicates()
+    df_votes = df_votes.rename(columns={"votes_received": "votes", "project_contract_address": "gauge"})
 except Exception as e:
     st.error(f"❌ Error loading data: {str(e)}")
     st.code(traceback.format_exc())
@@ -242,224 +197,26 @@ elif st.session_state.pool_filter_mode_bribes == 'worst20':
 else:  # 'all' - default mode, show everything
     filter_label = "All Pools"
 
-# Prepare data based on filter mode
-# Find pool column in bribes data first (used for matching)
-pool_match_col = None
-for col in ['pool_title', 'pool_name', 'pool_symbol', 'pool', 'symbol', 'name']:
-    if col in df_bribes.columns:
-        pool_match_col = col
-        break
+# Bribes page uses merged only. Pool = pool_symbol; bribe = direct_incentives; votes = votes_received.
+pool_match_col = "pool_symbol"
+pool_col = "pool_symbol"
 
-# Find pool column for aggregation (used later in the code)
-pool_col = None
-for col in ['pool_title', 'pool_name', 'pool_symbol', 'pool', 'gauge', 'gauge_address', 'symbol', 'name', 'Pool', 'POOL']:
-    if col in df_bribes.columns:
-        pool_col = col
-        break
-
-
-# Helper function to load aggregated CSV files (tries multiple paths)
-# Use load_aggregated_csv from utils (supports Supabase)
-load_aggregated_csv = utils.load_aggregated_csv
-
-# Helper function to match pools between main data and bribes data
-def match_pools_in_bribes(bribes_df, main_pools, match_col):
-    """Match pools from main data to bribes data using multiple strategies"""
-    if match_col is None or match_col not in bribes_df.columns:
-        return bribes_df.copy()  # Return all if no match column
-    
-    if bribes_df.empty:
-        return bribes_df.copy()
-    
-    matched_indices = []
-    main_pools_upper = [str(p).upper().strip() for p in main_pools]
-    
-    # First try exact match (fastest)
-    exact_matches = bribes_df[
-        bribes_df[match_col].astype(str).str.upper().str.strip().isin(main_pools_upper)
-    ]
-    if not exact_matches.empty:
-        return exact_matches.copy()
-    
-    # If no exact match, try fuzzy matching
-    for idx, row in bribes_df.iterrows():
-        pool_name = str(row[match_col]).upper().strip() if pd.notna(row[match_col]) else ""
-        if not pool_name:
-            continue
-            
-        for main_pool_upper in main_pools_upper:
-            # Strategy 1: Contains (either direction)
-            if main_pool_upper in pool_name or pool_name in main_pool_upper:
-                matched_indices.append(idx)
-                break
-            # Strategy 2: Remove spaces and compare
-            elif main_pool_upper.replace(' ', '') in pool_name.replace(' ', '') or pool_name.replace(' ', '') in main_pool_upper.replace(' ', ''):
-                matched_indices.append(idx)
-                break
-            # Strategy 3: Remove common suffixes/prefixes
-            main_clean = main_pool_upper.replace('POOL', '').replace('LP', '').replace('-', '').strip()
-            pool_clean = pool_name.replace('POOL', '').replace('LP', '').replace('-', '').strip()
-            if main_clean and pool_clean and len(main_clean) > 2 and len(pool_clean) > 2:
-                if main_clean in pool_clean or pool_clean in main_clean:
-                    matched_indices.append(idx)
-                    break
-    
-    if matched_indices:
-        return bribes_df.loc[matched_indices].copy()
-    else:
-        # If no matches found, return all bribes data (better than showing empty)
-        # This ensures data is still displayed even if matching fails
-        return bribes_df.copy()
-
-if st.session_state.pool_filter_mode_bribes == 'top20':
-    # Top 20 mode - show only pools that have bribes data
-    mode_label = "Top 20"
-    
-    # Load the aggregated CSV file with pools that have bribes
-    try:
-        df_top20_bribes = load_aggregated_csv('top20_pools_bribes_aggregated.csv')
-        if df_top20_bribes is None or df_top20_bribes.empty:
-            raise FileNotFoundError("CSV file not found")
-        
-        if 'pool_symbol' in df_top20_bribes.columns:
-            # Get pools from CSV - try pool_symbol, pool_title, and pool_name
-            pools_with_bribes_symbols = df_top20_bribes['pool_symbol'].unique().tolist()
-            pools_with_bribes_symbols = [str(p) for p in pools_with_bribes_symbols if pd.notna(p)]
-            
-            # Also get pool_title and pool_name if available for better matching
-            pools_with_bribes_titles = []
-            pools_with_bribes_names = []
-            if 'pool_title' in df_top20_bribes.columns:
-                pools_with_bribes_titles = df_top20_bribes['pool_title'].dropna().unique().tolist()
-                pools_with_bribes_titles = [str(p) for p in pools_with_bribes_titles if pd.notna(p)]
-            if 'pool_name' in df_top20_bribes.columns:
-                pools_with_bribes_names = df_top20_bribes['pool_name'].dropna().unique().tolist()
-                pools_with_bribes_names = [str(p) for p in pools_with_bribes_names if pd.notna(p)]
-            
-            # Combine all possible pool identifiers
-            all_pool_identifiers = set(pools_with_bribes_symbols + pools_with_bribes_titles + pools_with_bribes_names)
-            all_pool_identifiers_upper = [p.upper().strip() for p in all_pool_identifiers]
-            
-            # Filter bribes data - try multiple matching strategies
-            matching_mask = pd.Series([False] * len(df_bribes), index=df_bribes.index)
-            
-            # Try matching by pool_title
-            if 'pool_title' in df_bribes.columns:
-                matching_mask |= df_bribes['pool_title'].astype(str).str.upper().str.strip().isin(all_pool_identifiers_upper)
-            
-            # Try matching by pool_name
-            if 'pool_name' in df_bribes.columns:
-                matching_mask |= df_bribes['pool_name'].astype(str).str.upper().str.strip().isin(all_pool_identifiers_upper)
-            
-            # Try matching by pool_symbol if it exists
-            if 'pool_symbol' in df_bribes.columns:
-                matching_mask |= df_bribes['pool_symbol'].astype(str).str.upper().str.strip().isin(all_pool_identifiers_upper)
-            
-            # Try matching by pool_match_col as fallback
-            if pool_match_col and pool_match_col in df_bribes.columns:
-                matching_mask |= df_bribes[pool_match_col].astype(str).str.upper().str.strip().isin(all_pool_identifiers_upper)
-            
-            if matching_mask.any():
-                df_bribes_display = df_bribes[matching_mask].copy()
-            else:
-                # If no matches, show all data as fallback
-                df_bribes_display = df_bribes.copy()
-            
-            matched_count = len(pools_with_bribes_symbols)
-            
-            # Show warning about limited data
-            st.warning(f"⚠️ **Only {matched_count} pools from Top 20 has Bribes Data.** Showing only these pools.")
-            st.info(f"📊 Analysis for {mode_label} Pools with bribes data ({matched_count} of 20 pools)")
-        else:
-            # Fallback: show all bribes data
-            df_bribes_display = df_bribes.copy()
-            matched_count = len(df_bribes_display[pool_match_col].unique()) if pool_match_col and not df_bribes_display.empty else 0
-            st.info(f"📊 Showing analysis for {mode_label} Pools ({matched_count} pools in bribes data)")
-    except FileNotFoundError:
-        st.error("❌ File `data/top20_pools_bribes_aggregated.csv` not found. Please run the script `create_top_worst_bribes_csv.py` first.")
-        st.stop()
-    except Exception as e:
-        st.error(f"❌ Error loading data: {str(e)}")
-        st.stop()
-
-elif st.session_state.pool_filter_mode_bribes == 'worst20':
-    # Worst 20 mode - show only pools that have bribes data
-    mode_label = "Worst 20"
-    
-    # Load the aggregated CSV file with pools that have bribes
-    try:
-        df_worst20_bribes = load_aggregated_csv('worst20_pools_bribes_aggregated.csv')
-        if df_worst20_bribes is None or df_worst20_bribes.empty:
-            raise FileNotFoundError("CSV file not found")
-        
-        if 'pool_symbol' in df_worst20_bribes.columns:
-            # Get pools from CSV - try pool_symbol, pool_title, and pool_name
-            pools_with_bribes_symbols = df_worst20_bribes['pool_symbol'].unique().tolist()
-            pools_with_bribes_symbols = [str(p) for p in pools_with_bribes_symbols if pd.notna(p)]
-            
-            # Also get pool_title and pool_name if available for better matching
-            pools_with_bribes_titles = []
-            pools_with_bribes_names = []
-            if 'pool_title' in df_worst20_bribes.columns:
-                pools_with_bribes_titles = df_worst20_bribes['pool_title'].dropna().unique().tolist()
-                pools_with_bribes_titles = [str(p) for p in pools_with_bribes_titles if pd.notna(p)]
-            if 'pool_name' in df_worst20_bribes.columns:
-                pools_with_bribes_names = df_worst20_bribes['pool_name'].dropna().unique().tolist()
-                pools_with_bribes_names = [str(p) for p in pools_with_bribes_names if pd.notna(p)]
-            
-            # Combine all possible pool identifiers
-            all_pool_identifiers = set(pools_with_bribes_symbols + pools_with_bribes_titles + pools_with_bribes_names)
-            all_pool_identifiers_upper = [p.upper().strip() for p in all_pool_identifiers]
-            
-            # Filter bribes data - try multiple matching strategies
-            matching_mask = pd.Series([False] * len(df_bribes), index=df_bribes.index)
-            
-            # Try matching by pool_title
-            if 'pool_title' in df_bribes.columns:
-                matching_mask |= df_bribes['pool_title'].astype(str).str.upper().str.strip().isin(all_pool_identifiers_upper)
-            
-            # Try matching by pool_name
-            if 'pool_name' in df_bribes.columns:
-                matching_mask |= df_bribes['pool_name'].astype(str).str.upper().str.strip().isin(all_pool_identifiers_upper)
-            
-            # Try matching by pool_symbol if it exists
-            if 'pool_symbol' in df_bribes.columns:
-                matching_mask |= df_bribes['pool_symbol'].astype(str).str.upper().str.strip().isin(all_pool_identifiers_upper)
-            
-            # Try matching by pool_match_col as fallback
-            if pool_match_col and pool_match_col in df_bribes.columns:
-                matching_mask |= df_bribes[pool_match_col].astype(str).str.upper().str.strip().isin(all_pool_identifiers_upper)
-            
-            if matching_mask.any():
-                df_bribes_display = df_bribes[matching_mask].copy()
-            else:
-                # If no matches, show all data as fallback
-                df_bribes_display = df_bribes.copy()
-            
-            matched_count = len(pools_with_bribes_symbols)
-            
-            # Show warning about limited data
-            st.warning(f"⚠️ **Only {matched_count} pools from Worst 20 has Bribes Data.** Showing only these pools.")
-            st.info(f"📊 Analysis for {mode_label} Pools with bribes data ({matched_count} of 20 pools)")
-        else:
-            # Fallback: show all bribes data
-            df_bribes_display = df_bribes.copy()
-            matched_count = len(df_bribes_display[pool_match_col].unique()) if pool_match_col and not df_bribes_display.empty else 0
-            st.info(f"📊 Showing analysis for {mode_label} Pools ({matched_count} pools in bribes data)")
-    except FileNotFoundError:
-        st.error("❌ File `data/worst20_pools_bribes_aggregated.csv` not found. Please run the script `create_top_worst_bribes_csv.py` first.")
-        st.stop()
-    except Exception as e:
-        st.error(f"❌ Error loading data: {str(e)}")
-        st.stop()
-
+if st.session_state.pool_filter_mode_bribes == "top20":
+    top_pools = utils.get_top_pools(df, n=20)
+    mask = df_bribes["pool_symbol"].astype(str).str.strip().isin([str(p).strip() for p in top_pools])
+    df_bribes_display = df_bribes[mask].copy() if mask.any() else df_bribes.copy()
+    n = df_bribes_display["pool_symbol"].nunique()
+    st.info(f"📊 Top 20 Pools by protocol fees ({n} pools, from balancer_v2_merged)")
+elif st.session_state.pool_filter_mode_bribes == "worst20":
+    worst_pools = utils.get_worst_pools(df, n=20)
+    mask = df_bribes["pool_symbol"].astype(str).str.strip().isin([str(p).strip() for p in worst_pools])
+    df_bribes_display = df_bribes[mask].copy() if mask.any() else df_bribes.copy()
+    n = df_bribes_display["pool_symbol"].nunique()
+    st.info(f"📊 Worst 20 Pools by protocol fees ({n} pools, from balancer_v2_merged)")
 else:
-    # 'all' mode - show all pools by default
-    # Show all pools in bribes data
     df_bribes_display = df_bribes.copy()
-    
-    total_bribes_pools = len(df_bribes_display[pool_match_col].unique()) if pool_match_col and not df_bribes_display.empty else 0
-    st.info(f"📊 Showing analysis for all pools ({total_bribes_pools} pools in bribes data)")
+    n = df_bribes_display["pool_symbol"].nunique()
+    st.info(f"📊 All Pools ({n} pools)")
 
 # Pool filters at the top of sidebar
 def reset_performance_view():
@@ -474,7 +231,7 @@ utils.show_pool_filters('pool_filter_mode_bribes', on_change_callback=reset_perf
 col_title, col_logout = st.columns([1, 0.1])
 with col_title:
     st.markdown('<div class="page-title">💰 Bribes Analysis</div>', unsafe_allow_html=True)
-    st.markdown('<div class="page-subtitle">Comprehensive analysis of bribes, voting patterns, and their impact on BAL token distribution</div>', unsafe_allow_html=True)
+    st.markdown('<div class="page-subtitle">Incentives (USD) & votes from balancer_v2_merged • Protocol fees–based Top/Worst 20</div>', unsafe_allow_html=True)
 with col_logout:
     utils.show_logout_button()
 
@@ -499,7 +256,7 @@ try:
 
     # Try to find bribe amount column (case-insensitive search)
     df_cols_lower = {col.lower(): col for col in df_to_check.columns}
-    for col_lower in ['amount_usdc', 'bribe_amount_usd', 'total_bribes_usd', 'bribe_amount', 'bribes_usd', 'amount_usd', 'bribe', 'bribes', 'amount']:
+    for col_lower in ['direct_incentives', 'amount_usdc', 'bribe_amount_usd', 'total_bribes_usd', 'bribe_amount', 'bribes_usd', 'amount_usd', 'bribe', 'bribes', 'amount']:
         if col_lower in df_cols_lower:
             bribe_col = df_cols_lower[col_lower]
             break
@@ -508,8 +265,10 @@ try:
     # First check if we have veBAL votes from merge
     if 'vebal_votes' in df_to_check.columns:
         votes_col = 'vebal_votes'
+    elif 'votes_received' in df_to_check.columns:
+        votes_col = 'votes_received'
     else:
-        for col_lower in ['votes_received', 'votes', 'total_votes', 'vote_count', 'vote']:
+        for col_lower in ['votes', 'total_votes', 'vote_count', 'vote']:
             if col_lower in df_cols_lower:
                 votes_col = df_cols_lower[col_lower]
                 break
@@ -556,11 +315,14 @@ try:
             agg_dict['total_bribes_periodo'] = 'max'  # Use max since it's per period
         # Include veBAL votes if available
         if 'vebal_votes' in df_bribes_display.columns:
-            agg_dict['vebal_votes'] = 'max'  # Unique per gauge, use max (not sum!)
+            agg_dict['vebal_votes'] = 'sum'
         if 'vebal_pct_votes' in df_bribes_display.columns:
             agg_dict['vebal_pct_votes'] = 'mean'  # Average percentage
         if 'vebal_ranking' in df_bribes_display.columns:
-            agg_dict['vebal_ranking'] = 'min'  # Best (lowest) ranking
+            agg_dict['vebal_ranking'] = 'min'
+        for c in ['pool_title', 'pool_name']:
+            if c in df_bribes_display.columns:
+                agg_dict[c] = 'first'
 
         # Calculate metrics - aggregate by pool
         if pool_col and pool_col in df_bribes_display.columns:
@@ -608,35 +370,9 @@ st.markdown("### 📊 Key Metrics")
 
 col1, col2, col3 = st.columns(3)
 
-# Calculate total bribes based on filter mode
-if st.session_state.pool_filter_mode_bribes == 'top20':
-    # Sum amount_usdc from top20_pools_bribes_aggregated.csv
-    try:
-        df_top20_bribes = load_aggregated_csv('top20_pools_bribes_aggregated.csv')
-        if df_top20_bribes is not None and not df_top20_bribes.empty and 'amount_usdc' in df_top20_bribes.columns:
-            total_bribes = df_top20_bribes['amount_usdc'].sum()
-        else:
-            total_bribes = pool_bribes[bribe_col].sum() if bribe_col in pool_bribes.columns and not pool_bribes.empty else 0
-    except:
-        total_bribes = pool_bribes[bribe_col].sum() if bribe_col in pool_bribes.columns and not pool_bribes.empty else 0
-elif st.session_state.pool_filter_mode_bribes == 'worst20':
-    # Sum amount_usdc from worst20_pools_bribes_aggregated.csv
-    try:
-        df_worst20_bribes = load_aggregated_csv('worst20_pools_bribes_aggregated.csv')
-        if df_worst20_bribes is not None and not df_worst20_bribes.empty and 'amount_usdc' in df_worst20_bribes.columns:
-            total_bribes = df_worst20_bribes['amount_usdc'].sum()
-        else:
-            total_bribes = pool_bribes[bribe_col].sum() if bribe_col in pool_bribes.columns and not pool_bribes.empty else 0
-    except:
-        total_bribes = pool_bribes[bribe_col].sum() if bribe_col in pool_bribes.columns and not pool_bribes.empty else 0
-else:
-    # All pools - sum from pool_bribes
-    total_bribes = pool_bribes[bribe_col].sum() if bribe_col in pool_bribes.columns and not pool_bribes.empty else 0
-
-# Both Total Votes and veBAL Votes use the same source: sum of votes from veBAL_votes.csv
-total_votes = df_votes['votes'].sum() if not df_votes.empty and 'votes' in df_votes.columns else 0
-# For veBAL votes, sum directly from veBAL_votes.csv (same as Total Votes)
-total_vebal_votes = df_votes['votes'].sum() if not df_votes.empty and 'votes' in df_votes.columns else 0
+total_bribes = pool_bribes[bribe_col].sum() if bribe_col in pool_bribes.columns and not pool_bribes.empty else 0
+total_votes = df_bribes_display["votes_received"].sum() if "votes_received" in df_bribes_display.columns else 0
+total_vebal_votes = total_votes
 
 with col1:
     st.metric(
@@ -664,18 +400,14 @@ st.markdown("---")
 # Rankings
 st.markdown("### 🏆 Pool Rankings")
 
-# Get all pools from CSV files if in Top 20 or Worst 20 mode
+# Build ranking source from pool_bribes (merged data)
 all_pools_for_ranking = None
-if st.session_state.pool_filter_mode_bribes == 'top20':
-    df_ranking = load_aggregated_csv('top20_pools_bribes_aggregated.csv')
-    if df_ranking is not None and not df_ranking.empty and 'pool_symbol' in df_ranking.columns:
-        all_pools_for_ranking = df_ranking[['pool_symbol', 'pool_title', 'pool_name', 'amount_usdc']].copy()
-        all_pools_for_ranking = all_pools_for_ranking.rename(columns={'pool_symbol': 'pool', 'amount_usdc': 'bribe_amount'})
-elif st.session_state.pool_filter_mode_bribes == 'worst20':
-    df_ranking = load_aggregated_csv('worst20_pools_bribes_aggregated.csv')
-    if df_ranking is not None and not df_ranking.empty and 'pool_symbol' in df_ranking.columns:
-        all_pools_for_ranking = df_ranking[['pool_symbol', 'pool_title', 'pool_name', 'amount_usdc']].copy()
-        all_pools_for_ranking = all_pools_for_ranking.rename(columns={'pool_symbol': 'pool', 'amount_usdc': 'bribe_amount'})
+if not pool_bribes.empty and pool_col in pool_bribes.columns and bribe_col in pool_bribes.columns:
+    rr = pool_bribes[[pool_col, "pool_title", "pool_name", bribe_col]].copy()
+    rr = rr.rename(columns={pool_col: "pool", bribe_col: "bribe_amount"})
+    rr["pool_title"] = rr.get("pool_title", rr["pool"]).fillna(rr["pool"])
+    rr["pool_name"] = rr.get("pool_name", rr["pool"]).fillna(rr["pool"])
+    all_pools_for_ranking = rr
 
 tab1, tab2, tab3 = st.tabs(["💰 Top Bribes", "📈 Most Votes", "🗳️ veBAL Votes"])
 
@@ -960,45 +692,21 @@ with col_btn_perf:
 if st.session_state.show_performance_by_pool:
     if st.session_state.pool_filter_mode_bribes == 'top20':
         mode_label = "Top"
-        # Get pools from top20 CSV
-        try:
-            df_top20_bribes = load_aggregated_csv('top20_pools_bribes_aggregated.csv')
-            if df_top20_bribes is not None and not df_top20_bribes.empty and 'pool_symbol' in df_top20_bribes.columns:
-                category_pools = df_top20_bribes['pool_symbol'].unique().tolist()
-                category_pools = [str(p) for p in category_pools if pd.notna(p)]
-            else:
-                category_pools = []
-        except:
-            category_pools = []
+        category_pools = [str(p) for p in utils.get_top_pools(df, n=20) if pd.notna(p)]
     elif st.session_state.pool_filter_mode_bribes == 'worst20':
         mode_label = "Worst"
-        # Get pools from worst20 CSV
-        try:
-            df_worst20_bribes = load_aggregated_csv('worst20_pools_bribes_aggregated.csv')
-            if df_worst20_bribes is not None and not df_worst20_bribes.empty and 'pool_symbol' in df_worst20_bribes.columns:
-                category_pools = df_worst20_bribes['pool_symbol'].unique().tolist()
-                category_pools = [str(p) for p in category_pools if pd.notna(p)]
-            else:
-                category_pools = []
-        except:
-            category_pools = []
+        category_pools = [str(p) for p in utils.get_worst_pools(df, n=20) if pd.notna(p)]
     else:
         mode_label = "All"
-        # Get all pools from bribes data
         if pool_match_col and not df_bribes_display.empty:
             category_pools = df_bribes_display[pool_match_col].unique().tolist()
             category_pools = [str(p) for p in category_pools if pd.notna(p)]
         else:
             category_pools = []
-    
+
     st.markdown(f"#### {mode_label} Pools - Individual Performance")
-    
-    # Get aggregated CSV data for Top/Worst 20
+
     csv_data = None
-    if st.session_state.pool_filter_mode_bribes == 'top20':
-        csv_data = load_aggregated_csv('top20_pools_bribes_aggregated.csv')
-    elif st.session_state.pool_filter_mode_bribes == 'worst20':
-        csv_data = load_aggregated_csv('worst20_pools_bribes_aggregated.csv')
     
     # Pagination for "all" mode (when there are many pools)
     items_per_page = 10
@@ -1033,22 +741,27 @@ if st.session_state.show_performance_by_pool:
             st.info(f"Showing all {total_pools} pools")
     
     for pool in paginated_pools:
-        # Try to match pool from category_pools with df_bribes_display
         pool_bribe_data = pd.DataFrame()
-        
-        # First, try to get data from df_bribes_display using multiple matching strategies
-        if not df_bribes_display.empty:
-            # Try matching by pool_symbol, pool_title, pool_name
+        # Use pool_bribes (aggregated by pool) for metrics
+        if not pool_bribes.empty and pool_col in pool_bribes.columns:
+            m = pool_bribes[pool_bribes[pool_col].astype(str).str.upper().str.strip() == pool.upper().strip()]
+            if not m.empty:
+                pool_bribe_data = m
+        if pool_bribe_data.empty and not df_bribes_display.empty:
             for match_col in ['pool_symbol', 'pool_title', 'pool_name']:
                 if match_col in df_bribes_display.columns:
                     matches = df_bribes_display[
                         df_bribes_display[match_col].astype(str).str.upper().str.strip() == pool.upper().strip()
                     ]
-                    if not matches.empty:
-                        pool_bribe_data = matches
+                    if not matches.empty and bribe_col in matches.columns:
+                        agg = {bribe_col: 'sum'}
+                        if votes_col and votes_col in matches.columns:
+                            agg[votes_col] = 'sum'
+                        for c in ['vebal_votes', 'vebal_pct_votes', 'vebal_ranking']:
+                            if c in matches.columns:
+                                agg[c] = 'mean' if c == 'vebal_pct_votes' else ('min' if c == 'vebal_ranking' else 'sum')
+                        pool_bribe_data = matches.groupby(match_col).agg(agg).reset_index()
                         break
-        
-        # If no match in df_bribes_display, try to get from CSV aggregated data
         if pool_bribe_data.empty and csv_data is not None and not csv_data.empty:
             csv_match = csv_data[
                 csv_data['pool_symbol'].astype(str).str.upper().str.strip() == pool.upper().strip()

@@ -112,7 +112,7 @@ utils.show_pool_filters('pool_filter_mode_class')
 col_title, col_logout = st.columns([1, 0.1])
 with col_title:
     st.markdown('<div class="page-title">Pool Classification Analysis</div>', unsafe_allow_html=True)
-    st.markdown('<div class="page-subtitle">Legitimate vs Mercenary pools classification and historical BAL distribution</div>', unsafe_allow_html=True)
+    st.markdown('<div class="page-subtitle">From Aleluia.csv • Legitimate vs Mercenary • Top/Worst 20 by protocol fees</div>', unsafe_allow_html=True)
 with col_logout:
     utils.show_logout_button()
 
