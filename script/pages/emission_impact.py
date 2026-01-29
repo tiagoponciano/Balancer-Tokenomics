@@ -571,8 +571,7 @@ agg_dict = {
     'direct_incentives': 'sum'
 }
 
-if 'reduced_bal_emitted' in df_scenario.columns:
-    agg_dict['reduced_bal_emitted'] = 'sum'
+# Don't include reduced_bal_emitted in aggregation (removed from display)
 if 'bal_emited_votes' in df_scenario.columns:
     agg_dict['bal_emited_votes'] = 'sum'
 
@@ -598,8 +597,7 @@ if 'new_dao_profit' in scenario_summary.columns:
     column_mapping['new_dao_profit'] = 'New DAO Profit'
 if 'direct_incentives' in scenario_summary.columns:
     column_mapping['direct_incentives'] = 'Original Incentives'
-if 'reduced_bal_emitted' in scenario_summary.columns:
-    column_mapping['reduced_bal_emitted'] = 'Reduced BAL'
+# Removed 'Reduced BAL' column as requested
 if 'bal_emited_votes' in scenario_summary.columns:
     column_mapping['bal_emited_votes'] = 'Original BAL'
 if 'bal_reduction' in scenario_summary.columns:
@@ -612,6 +610,10 @@ if 'profit_change_pct' in scenario_summary.columns:
     column_mapping['profit_change_pct'] = 'Profit Change %'
 
 scenario_summary = scenario_summary.rename(columns=column_mapping)
+
+# Drop 'Reduced BAL' column if it exists (after renaming, it would be 'reduced_bal_emitted')
+if 'reduced_bal_emitted' in scenario_summary.columns:
+    scenario_summary = scenario_summary.drop(columns=['reduced_bal_emitted'])
 
 # Format monetary columns for display
 scenario_summary_display = scenario_summary.copy()
