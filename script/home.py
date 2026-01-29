@@ -112,7 +112,14 @@ if 'pool_filter_mode' not in st.session_state:
 # Pool filters at the top of sidebar (FIRST - before any other sidebar content)
 utils.show_pool_filters('pool_filter_mode')
 
-df_sim = utils.run_simulation_sidebar(df)
+# Date filter: Year + Quarter (1Q–4Q); quarter only appears when year is selected
+filter_year, filter_quarter = utils.show_date_filter_sidebar(df, key_prefix="date_filter_home")
+df = utils.apply_date_filter(df, filter_year, filter_quarter)
+if df.empty:
+    st.warning("No data in selected period. Adjust Year/Quarter or select «All».")
+    df_sim = df.copy()
+else:
+    df_sim = utils.run_simulation_sidebar(df)
 
 # Header with logout button
 col_title, col_logout = st.columns([1, 0.1])

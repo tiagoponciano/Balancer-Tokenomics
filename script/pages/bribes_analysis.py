@@ -20,10 +20,10 @@ utils.inject_css()
 import streamlit.components.v1 as components
 
 try:
-    # Bribes page uses balancer_v2_merged only. "Bribes" = direct_incentives (USD); votes = votes_received.
+    # Bribes page uses main data (Balancer-Tokenomics.csv). "Bribes" = direct_incentives (USD); votes = votes_received.
     df = utils.load_data()
     if df.empty:
-        st.warning("⚠️ No data. Ensure `balancer_v2_merged.csv` is in `data/`.")
+        st.warning("⚠️ No data. Ensure `Balancer-Tokenomics.csv` is in `data/`.")
         st.stop()
 
     df_bribes = df.copy()
@@ -201,6 +201,23 @@ else:  # 'all' - default mode, show everything
 pool_match_col = "pool_symbol"
 pool_col = "pool_symbol"
 
+# Pool filters at the top of sidebar
+def reset_performance_view():
+    """Reset performance view when filter changes"""
+    st.session_state.show_performance_by_pool = False
+    st.session_state.performance_page = 1
+    st.session_state.detailed_analysis_page = 1
+
+utils.show_pool_filters('pool_filter_mode_bribes', on_change_callback=reset_performance_view)
+
+# Date filter: Year + Quarter (applies before pool display so data is filtered by period)
+filter_year, filter_quarter = utils.show_date_filter_sidebar(df, key_prefix="date_filter_bribes")
+df = utils.apply_date_filter(df, filter_year, filter_quarter)
+df_bribes = utils.apply_date_filter(df_bribes, filter_year, filter_quarter)
+if df.empty:
+    st.warning("No data in selected period. Adjust Year/Quarter or select «All».")
+
+# Build display dataframe from date-filtered df_bribes (and date-filtered df for top/worst)
 if st.session_state.pool_filter_mode_bribes == "top20":
     top_pools = utils.get_top_pools(df, n=20)
     mask = df_bribes["pool_symbol"].astype(str).str.strip().isin([str(p).strip() for p in top_pools])
@@ -217,15 +234,6 @@ else:
     df_bribes_display = df_bribes.copy()
     n = df_bribes_display["pool_symbol"].nunique()
     st.info(f"📊 All Pools ({n} pools)")
-
-# Pool filters at the top of sidebar
-def reset_performance_view():
-    """Reset performance view when filter changes"""
-    st.session_state.show_performance_by_pool = False
-    st.session_state.performance_page = 1
-    st.session_state.detailed_analysis_page = 1
-
-utils.show_pool_filters('pool_filter_mode_bribes', on_change_callback=reset_performance_view)
 
 # Page Header with logout button
 col_title, col_logout = st.columns([1, 0.1])

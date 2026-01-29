@@ -108,6 +108,12 @@ if 'pool_filter_mode_emission' not in st.session_state:
 # Pool filters at the top of sidebar (FIRST - before any other sidebar content)
 utils.show_pool_filters('pool_filter_mode_emission')
 
+# Date filter: Year + Quarter
+filter_year, filter_quarter = utils.show_date_filter_sidebar(df, key_prefix="date_filter_emission")
+df = utils.apply_date_filter(df, filter_year, filter_quarter)
+if df.empty:
+    st.warning("No data in selected period. Adjust Year/Quarter or select «All».")
+
 df_sim = utils.run_simulation_sidebar(df)
 
 st.sidebar.markdown("---")

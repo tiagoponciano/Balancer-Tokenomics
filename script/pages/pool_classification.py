@@ -108,11 +108,17 @@ if 'pool_filter_mode_class' not in st.session_state:
 # Pool filters at the top of sidebar
 utils.show_pool_filters('pool_filter_mode_class')
 
+# Date filter: Year + Quarter
+filter_year, filter_quarter = utils.show_date_filter_sidebar(df, key_prefix="date_filter_class")
+df = utils.apply_date_filter(df, filter_year, filter_quarter)
+if df.empty:
+    st.warning("No data in selected period. Adjust Year/Quarter or select «All».")
+
 # Page Header with logout button
 col_title, col_logout = st.columns([1, 0.1])
 with col_title:
     st.markdown('<div class="page-title">Pool Classification Analysis</div>', unsafe_allow_html=True)
-    st.markdown('<div class="page-subtitle">From Aleluia.csv • Legitimate vs Mercenary • Top/Worst 20 by protocol fees</div>', unsafe_allow_html=True)
+    st.markdown('<div class="page-subtitle">From Balancer-Tokenomics.csv • Legitimate vs Mercenary • Top/Worst 20 by protocol fees</div>', unsafe_allow_html=True)
 with col_logout:
     utils.show_logout_button()
 

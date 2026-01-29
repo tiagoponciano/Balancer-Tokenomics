@@ -885,15 +885,15 @@ def inject_css():
             box-shadow: 0 3px 12px rgba(103, 162, 225, 0.2) !important;
         }
         
-        /* --- MULTISELECT STYLING (BASEWEB) --- */
+        /* --- SELECT / DROPDOWN STYLING (BASEWEB) — same glow and animation as other filters --- */
         div[data-baseweb="select"] {
             position: relative;
         }
         
-        /* Main select container */
+        /* Main select container: glow and transition */
         div[data-baseweb="select"] > div:first-child {
-            background-color: rgba(103, 162, 225, 0.1) !important;
-            border: 1px solid rgba(103, 162, 225, 0.3) !important;
+            background: linear-gradient(135deg, rgba(103, 162, 225, 0.12) 0%, rgba(103, 162, 225, 0.06) 100%) !important;
+            border: 1.5px solid rgba(103, 162, 225, 0.35) !important;
             border-radius: 8px !important;
             padding: 0.5rem 1rem !important;
             min-height: 40px !important;
@@ -901,24 +901,50 @@ def inject_css():
             font-size: 1rem !important;
             font-weight: 500 !important;
             color: white !important;
-            transition: all 0.2s !important;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
             display: flex !important;
             align-items: flex-start !important;
             justify-content: flex-start !important;
             gap: 0.5rem !important;
             overflow-y: auto !important;
             overflow-x: hidden !important;
+            box-shadow: 0 3px 12px rgba(103, 162, 225, 0.15) !important;
         }
         
         div[data-baseweb="select"] > div:first-child:hover {
-            background-color: rgba(103, 162, 225, 0.2) !important;
-            border-color: rgba(103, 162, 225, 0.5) !important;
+            background: linear-gradient(135deg, rgba(103, 162, 225, 0.2) 0%, rgba(103, 162, 225, 0.1) 100%) !important;
+            border-color: rgba(103, 162, 225, 0.55) !important;
+            box-shadow: 0 4px 16px rgba(103, 162, 225, 0.25) !important;
+            transform: translateY(-1px) !important;
         }
         
         div[data-baseweb="select"] > div:first-child:focus,
         div[data-baseweb="select"] > div:first-child:focus-within {
             outline: none !important;
-            box-shadow: 0 0 0 3px rgba(103, 162, 225, 0.3) !important;
+            box-shadow: 0 0 0 3px rgba(103, 162, 225, 0.35), 0 4px 16px rgba(103, 162, 225, 0.2) !important;
+        }
+        
+        /* Sidebar single selectbox (Year/Quarter): center the displayed value, keep chevron on the right */
+        section[data-testid="stSidebar"] div[data-baseweb="select"]:not(:has(span[role="listbox"] > span)) > div:first-child {
+            display: flex !important;
+            align-items: center !important;
+            cursor: pointer !important;
+        }
+        section[data-testid="stSidebar"] div[data-baseweb="select"]:not(:has(span[role="listbox"] > span)) > div:first-child > div:first-child {
+            flex: 1 !important;
+            min-width: 0 !important;
+            text-align: center !important;
+            display: flex !important;
+            justify-content: center !important;
+            align-items: center !important;
+        }
+        /* Prevent typing in sidebar selectbox: input is display-only; pointer on whole dropdown */
+        section[data-testid="stSidebar"] div[data-baseweb="select"] > div:first-child {
+            cursor: pointer !important;
+        }
+        section[data-testid="stSidebar"] div[data-baseweb="select"] input {
+            caret-color: transparent !important;
+            cursor: pointer !important;
         }
         
         /* Selected values display - scrollable container */
@@ -1096,22 +1122,43 @@ def inject_css():
                 });
             }
             
+            // Sidebar selectbox: prevent typing (readonly), keep dropdown click working
+            function makeSidebarSelectReadOnly() {
+                const contexts = [document, window.parent?.document || document, window.top?.document || document];
+                contexts.forEach(doc => {
+                    if (!doc) return;
+                    const sidebar = doc.querySelector('section[data-testid="stSidebar"]');
+                    if (!sidebar) return;
+                    sidebar.querySelectorAll('div[data-baseweb="select"] input').forEach(input => {
+                        if (!input.readOnly) {
+                            input.readOnly = true;
+                            input.setAttribute('readonly', 'readonly');
+                        }
+                    });
+                });
+            }
+            
             // Executa imediatamente
             applyPerformanceButtonClass();
+            makeSidebarSelectReadOnly();
             
             // Executa após delays
             setTimeout(applyPerformanceButtonClass, 100);
             setTimeout(applyPerformanceButtonClass, 300);
             setTimeout(applyPerformanceButtonClass, 500);
             setTimeout(applyPerformanceButtonClass, 1000);
+            setTimeout(makeSidebarSelectReadOnly, 200);
+            setTimeout(makeSidebarSelectReadOnly, 600);
             
             // Executa repetidamente
             setInterval(applyPerformanceButtonClass, 2000);
+            setInterval(makeSidebarSelectReadOnly, 1500);
             
             // Observa mudanças no DOM
             if (window.MutationObserver) {
                 const observer = new MutationObserver(() => {
                     setTimeout(applyPerformanceButtonClass, 50);
+                    setTimeout(makeSidebarSelectReadOnly, 50);
                 });
                 
                 const contexts = [
@@ -1265,8 +1312,77 @@ def show_pool_filters(session_key='pool_filter_mode', on_change_callback=None):
                 on_change_callback()
             st.rerun()
 
-# Primary data source: Aleluia.csv (merge of financial + votes). Fallback: balancer_v2_merged / master.
-ALELUIA_FILENAME = 'Aleluia.csv'
+
+# Quarters: 1Q (Jan–Mar), 2Q (Apr–Jun), 3Q (Jul–Sep), 4Q (Oct–Dec)
+QUARTER_OPTIONS = [
+    ("All", None),
+    ("1Q (Jan–Mar)", [1, 2, 3]),
+    ("2Q (Apr–Jun)", [4, 5, 6]),
+    ("3Q (Jul–Sep)", [7, 8, 9]),
+    ("4Q (Oct–Dec)", [10, 11, 12]),
+]
+
+
+def show_date_filter_sidebar(df, key_prefix="date_filter"):
+    """
+    Date filter in sidebar: Year (dropdown) and Quarter (only appears when a year is selected).
+    Returns (year, quarter_months): year int or None, quarter_months list of months or None.
+    """
+    if df is None or df.empty or "block_date" not in df.columns:
+        return None, None
+    dt = pd.to_datetime(df["block_date"], errors="coerce")
+    years = sorted(dt.dt.year.dropna().astype(int).unique().tolist())
+    if not years:
+        return None, None
+
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### 📅 Date Filter")
+
+    year_options = ["All"] + [str(y) for y in years]
+    selected_year = st.sidebar.selectbox(
+        "Year",
+        options=year_options,
+        key=f"{key_prefix}_year",
+    )
+
+    if selected_year == "All":
+        return None, None
+
+    year_int = int(selected_year)
+    quarter_labels = [q[0] for q in QUARTER_OPTIONS]
+    selected_quarter = st.sidebar.selectbox(
+        "Quarter",
+        options=quarter_labels,
+        key=f"{key_prefix}_quarter",
+    )
+
+    quarter_months = None
+    for label, months in QUARTER_OPTIONS:
+        if label == selected_quarter and months is not None:
+            quarter_months = months
+            break
+
+    return year_int, quarter_months
+
+
+def apply_date_filter(df, year, quarter_months):
+    """
+    Filter df by year and quarter (block_date).
+    year: int or None (all). quarter_months: list [1,2,3] or None (all).
+    """
+    if df is None or df.empty or (year is None and quarter_months is None):
+        return df
+    df = df.copy()
+    dt = pd.to_datetime(df["block_date"], errors="coerce")
+    if year is not None:
+        df = df.loc[dt.dt.year == year]
+    if quarter_months is not None:
+        df = df.loc[dt.dt.month.isin(quarter_months)]
+    return df
+
+
+# Primary data source: Balancer-Tokenomics.csv (merge of financial + votes). Fallback: balancer_v2_merged / master.
+MAIN_DATA_FILENAME = 'Balancer-Tokenomics.csv'
 BAL_EMISSIONS_FILENAME = 'BAL_Emissions_by_GaugePool.csv'
 
 
@@ -1311,10 +1427,10 @@ def load_bal_emissions_daily():
     return out
 
 
-def _process_aleluia_data(df):
+def _process_main_data(df):
     """
-    Process Aleluia.csv for Streamlit: align types, merge direct_incentives from BAL_Emissions,
-    compute dao_profit_usd, emissions_roi, then classify_pools. Aleluia has: blockchain, project,
+    Process Balancer-Tokenomics.csv for Streamlit: align types, merge direct_incentives from BAL_Emissions,
+    compute dao_profit_usd, emissions_roi, then classify_pools. Main data has: blockchain, project,
     version, block_date, project_contract_address, pool_symbol, pool_type, swap_amount_usd, tvl_usd,
     tvl_eth, total_protocol_fee_usd, protocol_fee_amount_usd, swap_fee_usd, yield_fee_usd, swap_fee_%,
     core_non_core (0/1), bal_emited_votes, votes_received.
@@ -1391,11 +1507,11 @@ def _process_merged_data(df):
 
 @st.cache_data
 def load_data():
-    """Load main data: Aleluia.csv first (single source). Fallback: balancer_v2_merged.csv, balancer_v2_master.csv."""
+    """Load main data: Balancer-Tokenomics.csv first (single source). Fallback: balancer_v2_merged.csv, balancer_v2_master.csv."""
     try:
-        df = download_csv_from_supabase(ALELUIA_FILENAME)
+        df = download_csv_from_supabase(MAIN_DATA_FILENAME)
         if df is not None and not df.empty:
-            return _process_aleluia_data(df)
+            return _process_main_data(df)
 
         cwd = os.getcwd()
         try:
@@ -1413,11 +1529,11 @@ def load_data():
             'data',
         ]
         for data_dir in possible_data_dirs:
-            path = os.path.join(os.path.abspath(data_dir), ALELUIA_FILENAME)
+            path = os.path.join(os.path.abspath(data_dir), MAIN_DATA_FILENAME)
             if os.path.exists(path) and os.path.getsize(path) > 100:
                 df = pd.read_csv(path)
                 if df is not None and not df.empty:
-                    return _process_aleluia_data(df)
+                    return _process_main_data(df)
 
         filenames = ['balancer_v2_merged.csv', 'balancer_v2_master.csv']
         df = None
@@ -1450,7 +1566,7 @@ def load_data():
             except Exception:
                 continue
 
-        st.error("❌ Aleluia.csv not found. Ensure it is in the `data/` folder (or balancer_v2_merged.csv as fallback).")
+        st.error("❌ Balancer-Tokenomics.csv not found. Ensure it is in the `data/` folder (or balancer_v2_merged.csv as fallback).")
         with st.expander("🔍 Debug"):
             st.write(f"**CWD:** `{cwd}`")
             for d in possible_data_dirs:
@@ -1537,7 +1653,7 @@ def _normalize_gauge(addr):
 
 def get_votes_by_pool_from_main_df(df):
     """
-    Build votes-by-pool summary from main dataframe (Aleluia via load_data()).
+    Build votes-by-pool summary from main dataframe (Balancer-Tokenomics via load_data()).
     Returns one row per pool with: pool_symbol, votes, pct_votes, ranking, symbol_clean, gauge_address.
     """
     if df is None or df.empty:
@@ -1785,18 +1901,16 @@ def load_bribes_data():
         return pd.DataFrame()
 
 def get_top_pools(df, n=20):
-    col = 'total_protocol_fee_usd' if 'total_protocol_fee_usd' in df.columns else 'dao_profit_usd'
-    if col not in df.columns:
+    """Top N pools by sum(dao_profit_usd) per pool. dao_profit_usd = protocol_fee - direct_incentives."""
+    if 'dao_profit_usd' not in df.columns or 'pool_symbol' not in df.columns:
         return []
-    pool_agg = df.groupby('pool_symbol')[col].sum().sort_values(ascending=False).head(n)
-    return pool_agg.index.tolist()
+    return df.groupby('pool_symbol')['dao_profit_usd'].sum().nlargest(n).index.tolist()
 
 def get_worst_pools(df, n=20):
-    col = 'total_protocol_fee_usd' if 'total_protocol_fee_usd' in df.columns else 'dao_profit_usd'
-    if col not in df.columns:
+    """Worst N pools by sum(dao_profit_usd) per pool (most negative first)."""
+    if 'dao_profit_usd' not in df.columns or 'pool_symbol' not in df.columns:
         return []
-    pool_agg = df.groupby('pool_symbol')[col].sum().sort_values(ascending=True).head(n)
-    return pool_agg.index.tolist()
+    return df.groupby('pool_symbol')['dao_profit_usd'].sum().nsmallest(n).index.tolist()
 
 def run_simulation_sidebar(df):
     st.sidebar.markdown("### ⚖️ Simulation Controls")

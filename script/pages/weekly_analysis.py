@@ -114,6 +114,12 @@ def clear_weekly_selections():
 
 utils.show_pool_filters('pool_filter_mode_weekly', on_change_callback=clear_weekly_selections)
 
+# Date filter: Year + Quarter
+filter_year, filter_quarter = utils.show_date_filter_sidebar(df, key_prefix="date_filter_weekly")
+df = utils.apply_date_filter(df, filter_year, filter_quarter)
+if df.empty:
+    st.warning("No data in selected period. Adjust Year/Quarter or select «All».")
+
 df_sim = utils.run_simulation_sidebar(df)
 
 # Page Header with logout button

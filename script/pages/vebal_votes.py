@@ -98,22 +98,31 @@ if (window.MutationObserver) {
 </script>
 """, height=0)
 
-# veBAL Votes: from Aleluia.csv (load_data) — votes by pool, Top/Worst 20 by protocol fees
+# veBAL Votes: from Balancer-Tokenomics.csv (load_data) — votes by pool, Top/Worst 20 by protocol fees
 df_main = utils.load_data()
 if df_main.empty:
-    st.error("❌ No data. Ensure `Aleluia.csv` is in `data/`.")
-    st.stop()
-
-df_votes = utils.get_votes_by_pool_from_main_df(df_main)
-if df_votes.empty:
-    st.error("❌ No votes data in Aleluia (missing votes_received or pool_symbol).")
+    st.error("❌ No data. Ensure `Balancer-Tokenomics.csv` is in `data/`.")
     st.stop()
 
 # Initialize session state - default to 'all' (show everything)
 if 'pool_filter_mode_votes' not in st.session_state:
     st.session_state.pool_filter_mode_votes = 'all'  # Default: show all pools
 
-# Filter votes: Top/Worst 20 by protocol fees (from same Aleluia data)
+# Pool filters at the top of sidebar (FIRST)
+utils.show_pool_filters('pool_filter_mode_votes')
+
+# Date filter: Year + Quarter (appears below Pool Selection)
+filter_year, filter_quarter = utils.show_date_filter_sidebar(df_main, key_prefix="date_filter_votes")
+df_main = utils.apply_date_filter(df_main, filter_year, filter_quarter)
+if df_main.empty:
+    st.warning("No data in selected period. Adjust Year/Quarter or select «All».")
+
+df_votes = utils.get_votes_by_pool_from_main_df(df_main)
+if df_votes.empty:
+    st.error("❌ No votes data in Balancer-Tokenomics (missing votes_received or pool_symbol).")
+    st.stop()
+
+# Filter votes: Top/Worst 20 by protocol fees (from same Balancer-Tokenomics data)
 df_display = df_votes.copy()
 has_pool_symbol = 'pool_symbol' in df_display.columns
 
@@ -124,7 +133,7 @@ if st.session_state.pool_filter_mode_votes == 'top20':
         df_filtered = df_display[df_display['pool_symbol'].astype(str).str.strip().isin(top_list)].copy()
         if len(df_filtered) > 0:
             df_display = df_filtered
-            st.info(f"📊 Top 20 Pools by protocol fees ({len(df_display)} pools, from Aleluia)")
+            st.info(f"📊 Top 20 Pools by protocol fees ({len(df_display)} pools, from Balancer-Tokenomics)")
         else:
             st.info(f"📊 Showing all ({len(df_display)} pools)")
     else:
@@ -136,7 +145,7 @@ elif st.session_state.pool_filter_mode_votes == 'worst20':
         df_filtered = df_display[df_display['pool_symbol'].astype(str).str.strip().isin(worst_list)].copy()
         if len(df_filtered) > 0:
             df_display = df_filtered
-            st.info(f"📊 Worst 20 Pools by protocol fees ({len(df_display)} pools, from Aleluia)")
+            st.info(f"📊 Worst 20 Pools by protocol fees ({len(df_display)} pools, from Balancer-Tokenomics)")
         else:
             st.info(f"📊 Showing all ({len(df_display)} pools)")
     else:
@@ -146,14 +155,11 @@ else:
 
 total_gauges = len(df_display)
 
-# Pool filters at the top of sidebar
-utils.show_pool_filters('pool_filter_mode_votes')
-
 # Page Header with logout button
 col_title, col_logout = st.columns([1, 0.1])
 with col_title:
     st.markdown('<div class="page-title">🗳️ veBAL Votes Analysis</div>', unsafe_allow_html=True)
-    st.markdown('<div class="page-subtitle">From Aleluia.csv • Votes by pool (votes_received) • Top/Worst 20 by protocol fees</div>', unsafe_allow_html=True)
+    st.markdown('<div class="page-subtitle">From Balancer-Tokenomics.csv • Votes by pool (votes_received) • Top/Worst 20 by protocol fees</div>', unsafe_allow_html=True)
 with col_logout:
     utils.show_logout_button()
 
