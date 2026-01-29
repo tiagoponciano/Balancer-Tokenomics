@@ -236,6 +236,23 @@ def inject_css():
         section[data-testid="stSidebar"] hr {
             margin: 0.4rem 0 !important;
         }
+        /* Date Filter: Year & Quarter — same color/weight as Top 20, keep default font-size */
+        section[data-testid="stSidebar"] div[data-testid="stVerticalBlock"]:has(div[data-baseweb="select"]:not(:has(span[role="listbox"] > span))) p,
+        section[data-testid="stSidebar"] div[data-testid="stVerticalBlock"]:has(div[data-baseweb="select"]:not(:has(span[role="listbox"] > span))) label {
+            font-size: 0.8125rem !important; 
+            font-family: inherit !important;
+            font-weight: 600 !important;
+            color: #8BB5F0 !important;
+            letter-spacing: 0.03em !important;
+        }
+        section[data-testid="stSidebar"] div[data-baseweb="select"]:not(:has(span[role="listbox"] > span)) > div:first-child,
+        section[data-testid="stSidebar"] div[data-baseweb="select"]:not(:has(span[role="listbox"] > span)) input {
+            font-size: 0.8125rem !important;
+            font-family: inherit !important;
+            font-weight: 600 !important;
+            color: #8BB5F0 !important;
+            letter-spacing: 0.03em !important;
+        }
         
         .stInfo {
             background: rgba(103, 162, 225, 0.1);
@@ -1387,27 +1404,32 @@ BAL_EMISSIONS_FILENAME = 'BAL_Emissions_by_GaugePool.csv'
 
 
 @st.cache_data
-def load_bal_emissions_daily():
+def load_bal_emissions_daily(_merge_by_gauge=True):
     """
     Load BAL_Emissions_by_GaugePool.csv and compute daily direct_incentives (round_emissions_usd / duration).
-    Returns DataFrame with columns: blockchain, project_contract_address, block_date, direct_incentives.
+    Uses gauge_address for merge key so Balancer-Tokenomics (votes = gauge) matches. Returns DataFrame with
+    columns: blockchain, project_contract_address, block_date, direct_incentives.
     """
     df = load_aggregated_csv(BAL_EMISSIONS_FILENAME)
     if df is None or df.empty:
         return pd.DataFrame()
-    for c in ['start_date', 'end_date', 'blockchain', 'pool_address', 'round_emissions_usd']:
+    for c in ['start_date', 'end_date', 'blockchain', 'round_emissions_usd']:
         if c not in df.columns:
             return pd.DataFrame()
+    # Main data (Balancer-Tokenomics) uses project_contract_address from votes = gauge address; merge on gauge_address
+    addr_col = 'gauge_address' if 'gauge_address' in df.columns else 'pool_address'
+    if addr_col not in df.columns:
+        return pd.DataFrame()
     df = df.copy()
     df['start_date'] = pd.to_datetime(df['start_date'], errors='coerce')
     df['end_date'] = pd.to_datetime(df['end_date'], errors='coerce')
     df['round_emissions_usd'] = pd.to_numeric(df['round_emissions_usd'], errors='coerce').fillna(0)
     df = df.dropna(subset=['start_date', 'end_date', 'blockchain'])
-    df = df[df['pool_address'].notna() & (df['pool_address'].astype(str).str.strip() != '')].copy()
+    df = df[df[addr_col].notna() & (df[addr_col].astype(str).str.strip() != '')].copy()
     df['duration_days'] = (df['end_date'] - df['start_date']).dt.days
     df.loc[df['duration_days'] < 1, 'duration_days'] = 1
     df['daily_incentive_usd'] = df['round_emissions_usd'] / df['duration_days']
-    df['project_contract_address'] = df['pool_address'].astype(str).str.strip().str.lower()
+    df['project_contract_address'] = df[addr_col].astype(str).str.strip().str.lower()
     rows = []
     for _, r in df.iterrows():
         try:
@@ -1450,24 +1472,28 @@ def _process_main_data(df):
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
     df['is_core_pool'] = pd.to_numeric(df.get('core_non_core', 0), errors='coerce').fillna(0).astype(int)
-    df['project_contract_address_norm'] = df['project_contract_address'].astype(str).str.strip().str.lower()
-    df_inc = load_bal_emissions_daily()
-    if not df_inc.empty:
-        df_inc = df_inc.rename(columns={'block_date': '_inc_date'})
-        df_inc['project_contract_address_norm'] = df_inc['project_contract_address'].astype(str).str.strip().str.lower()
-        # Use date string for merge to avoid datetime64[ns, UTC] vs datetime64[ns] mismatch
-        df['_date_only'] = pd.to_datetime(df['block_date'], errors='coerce').dt.strftime('%Y-%m-%d')
-        df_inc['_date_only'] = pd.to_datetime(df_inc['_inc_date'], errors='coerce').dt.strftime('%Y-%m-%d')
-        df = df.merge(
-            df_inc[['blockchain', 'project_contract_address_norm', '_date_only', 'direct_incentives']],
-            on=['blockchain', 'project_contract_address_norm', '_date_only'],
-            how='left',
-        )
-        df = df.drop(columns=['_date_only', 'project_contract_address_norm'], errors='ignore')
+    # direct_incentives: prefer column from CSV (e.g. from daily_emissions_usd in Balancer-Tokenomics); else merge from BAL_Emissions_by_GaugePool
+    has_inc = 'direct_incentives' in df.columns and pd.to_numeric(df['direct_incentives'], errors='coerce').fillna(0).gt(0).any()
+    if has_inc:
         df['direct_incentives'] = pd.to_numeric(df['direct_incentives'], errors='coerce').fillna(0)
     else:
-        df['direct_incentives'] = 0.0
-        df = df.drop(columns=['project_contract_address_norm'], errors='ignore')
+        df['project_contract_address_norm'] = df['project_contract_address'].astype(str).str.strip().str.lower()
+        df_inc = load_bal_emissions_daily()
+        if not df_inc.empty:
+            df_inc = df_inc.rename(columns={'block_date': '_inc_date'})
+            df_inc['project_contract_address_norm'] = df_inc['project_contract_address'].astype(str).str.strip().str.lower()
+            df['_date_only'] = pd.to_datetime(df['block_date'], errors='coerce').dt.strftime('%Y-%m-%d')
+            df_inc['_date_only'] = pd.to_datetime(df_inc['_inc_date'], errors='coerce').dt.strftime('%Y-%m-%d')
+            df = df.merge(
+                df_inc[['blockchain', 'project_contract_address_norm', '_date_only', 'direct_incentives']],
+                on=['blockchain', 'project_contract_address_norm', '_date_only'],
+                how='left',
+            )
+            df = df.drop(columns=['_date_only', 'project_contract_address_norm'], errors='ignore')
+            df['direct_incentives'] = pd.to_numeric(df['direct_incentives'], errors='coerce').fillna(0)
+        else:
+            df['direct_incentives'] = 0.0
+            df = df.drop(columns=['project_contract_address_norm'], errors='ignore')
     rev = df['protocol_fee_amount_usd'] if 'protocol_fee_amount_usd' in df.columns else 0
     inc = df['direct_incentives']
     df['dao_profit_usd'] = rev - inc
