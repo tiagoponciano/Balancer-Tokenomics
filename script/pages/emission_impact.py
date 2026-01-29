@@ -145,20 +145,32 @@ df = utils.apply_date_filter(df, filter_year, filter_quarter)
 if df.empty:
     st.warning("No data in selected period. Adjust Year/Quarter or select «All».")
 
-df_sim = utils.run_simulation_sidebar(df)
+# Don't run simulation sidebar - we use bal_emited_votes directly from data (same as home page)
+# This page focuses on emission reduction scenarios, not revenue distribution simulation
+df_sim = df.copy()
+
+# Ensure block_date is datetime (needed for temporal charts)
+if 'block_date' in df_sim.columns:
+    if not pd.api.types.is_datetime64_any_dtype(df_sim['block_date']):
+        df_sim['block_date'] = pd.to_datetime(df_sim['block_date'], errors='coerce')
+
+# Ensure we have bal_emited_votes (same column used in home page)
+if 'bal_emited_votes' not in df_sim.columns:
+    df_sim['bal_emited_votes'] = 0
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 📉 Emission Reduction Scenario")
 
-# Custom reduction percentage input
-reduction_pct = st.sidebar.slider(
-    "Protocol Fee Reduction (%)",
-    min_value=0,
-    max_value=100,
-    value=50,
-    step=5,
-    help="Percentage reduction in protocol fees (e.g., 50% means keep 50% of emissions)"
+# Custom reduction percentage input (number input for direct value entry)
+reduction_pct = st.sidebar.number_input(
+    "BAL Emission Reduction (%)",
+    min_value=0.0,
+    max_value=100.0,
+    value=0.0,
+    step=0.5,
+    help="Enter the percentage reduction in BAL emissions (e.g., 50 means 50% reduction, keeping 50% of emissions). Start with 0 for baseline."
 )
+
 reduction_factor = (100 - reduction_pct) / 100  # Convert to factor (50% reduction = 0.5 factor)
 
 # Toggle for core pools only
@@ -228,8 +240,8 @@ else:
 # ============================================================================
 st.markdown("### 📊 Emissions Analysis: Legitimate vs Mercenary Pools")
 
-# Determine which BAL column to use
-bal_col = 'sim_bal_emitted' if 'sim_bal_emitted' in df_display.columns else 'bal_emited_votes'
+# Use bal_emited_votes from data (same as home page)
+bal_col = 'bal_emited_votes'
 
 # Aggregate emissions by pool category
 emissions_by_category = df_display.groupby('pool_category').agg({
@@ -296,8 +308,14 @@ st.dataframe(emissions_display, use_container_width=True, hide_index=False)
 # Temporal chart for emissions by category
 st.markdown("#### 📈 Emissions Over Time: Legitimate vs Mercenary")
 
-# Prepare temporal data
-df_display['month'] = df_display['block_date'].dt.to_period('M').dt.start_time
+# Prepare temporal data - ensure block_date is datetime
+if 'block_date' in df_display.columns:
+    if not pd.api.types.is_datetime64_any_dtype(df_display['block_date']):
+        df_display['block_date'] = pd.to_datetime(df_display['block_date'], errors='coerce')
+    df_display['month'] = df_display['block_date'].dt.to_period('M').dt.start_time
+else:
+    st.warning("block_date column not found. Cannot create temporal chart.")
+    df_display['month'] = pd.NaT
 emissions_temporal = df_display.groupby(['month', 'pool_category']).agg({
     bal_col: 'sum'
 }).reset_index()
@@ -517,22 +535,14 @@ st.markdown("---")
 # ============================================================================
 st.markdown("### 📊 Current State (Baseline)")
 
-if 'sim_bal_emitted' in df_display.columns:
-    baseline = df_display.groupby('pool_category').agg({
-        'sim_bal_emitted': 'sum',
-        'direct_incentives': 'sum',
-        'protocol_fee_amount_usd': 'sum',
-        'dao_profit_usd': 'sum'
-    }).round(2)
-    baseline.columns = ['BAL Emitted', 'Total Incentives', 'Total Revenue', 'Total DAO Profit']
-else:
-    baseline = df_display.groupby('pool_category').agg({
-        'bal_emited_votes': 'sum',
-        'direct_incentives': 'sum',
-        'protocol_fee_amount_usd': 'sum',
-        'dao_profit_usd': 'sum'
-    }).round(2)
-    baseline.columns = ['BAL Emitted', 'Total Incentives', 'Total Revenue', 'Total DAO Profit']
+# Use bal_emited_votes from data (same as home page)
+baseline = df_display.groupby('pool_category').agg({
+    'bal_emited_votes': 'sum',
+    'direct_incentives': 'sum',
+    'protocol_fee_amount_usd': 'sum',
+    'dao_profit_usd': 'sum'
+}).round(2)
+baseline.columns = ['BAL Emitted', 'Total Incentives', 'Total Revenue', 'Total DAO Profit']
 
 # Format monetary columns
 baseline_display = baseline.copy()
@@ -545,7 +555,7 @@ st.dataframe(baseline_display, use_container_width=True, hide_index=False)
 st.markdown("---")
 
 # Build scenario name based on settings
-scenario_name = f"{reduction_pct}% Protocol Fee Reduction"
+scenario_name = f"{reduction_pct}% BAL Emission Reduction"
 if core_only:
     scenario_name += " (Core Pools Only)"
 
@@ -563,17 +573,14 @@ agg_dict = {
 
 if 'reduced_bal_emitted' in df_scenario.columns:
     agg_dict['reduced_bal_emitted'] = 'sum'
-if 'sim_bal_emitted' in df_scenario.columns:
-    agg_dict['sim_bal_emitted'] = 'sum'
-elif 'bal_emited_votes' in df_scenario.columns:
+if 'bal_emited_votes' in df_scenario.columns:
     agg_dict['bal_emited_votes'] = 'sum'
 
 scenario_summary = df_scenario.groupby('pool_category').agg(agg_dict).round(2)
 
-if 'reduced_bal_emitted' in scenario_summary.columns:
-    bal_col = 'reduced_bal_emitted'
-    orig_bal_col = 'sim_bal_emitted' if 'sim_bal_emitted' in scenario_summary.columns else 'bal_emited_votes'
-    scenario_summary['bal_reduction'] = scenario_summary[orig_bal_col] - scenario_summary[bal_col]
+# Calculate additional metrics
+if 'reduced_bal_emitted' in scenario_summary.columns and 'bal_emited_votes' in scenario_summary.columns:
+    scenario_summary['bal_reduction'] = scenario_summary['bal_emited_votes'] - scenario_summary['reduced_bal_emitted']
 else:
     scenario_summary['bal_reduction'] = 0
 
@@ -581,10 +588,30 @@ scenario_summary['incentive_reduction'] = scenario_summary['direct_incentives'] 
 scenario_summary['profit_change'] = scenario_summary['new_dao_profit'] - baseline['Total DAO Profit']
 scenario_summary['profit_change_pct'] = (scenario_summary['profit_change'] / baseline['Total DAO Profit'] * 100).round(2).fillna(0)
 
-if 'bal_reduction' in scenario_summary.columns and scenario_summary['bal_reduction'].sum() > 0:
-    scenario_summary.columns = ['Reduced Incentives', 'Total Revenue', 'New DAO Profit', 'Original Incentives', 'Reduced BAL', 'Original BAL', 'BAL Reduction', 'Incentive Reduction', 'Profit Change', 'Profit Change %']
-else:
-    scenario_summary.columns = ['Reduced Incentives', 'Total Revenue', 'New DAO Profit', 'Original Incentives', 'Incentive Reduction', 'Profit Change', 'Profit Change %']
+# Rename columns based on what actually exists
+column_mapping = {}
+if 'reduced_incentives' in scenario_summary.columns:
+    column_mapping['reduced_incentives'] = 'Reduced Incentives'
+if 'protocol_fee_amount_usd' in scenario_summary.columns:
+    column_mapping['protocol_fee_amount_usd'] = 'Total Revenue'
+if 'new_dao_profit' in scenario_summary.columns:
+    column_mapping['new_dao_profit'] = 'New DAO Profit'
+if 'direct_incentives' in scenario_summary.columns:
+    column_mapping['direct_incentives'] = 'Original Incentives'
+if 'reduced_bal_emitted' in scenario_summary.columns:
+    column_mapping['reduced_bal_emitted'] = 'Reduced BAL'
+if 'bal_emited_votes' in scenario_summary.columns:
+    column_mapping['bal_emited_votes'] = 'Original BAL'
+if 'bal_reduction' in scenario_summary.columns:
+    column_mapping['bal_reduction'] = 'BAL Reduction'
+if 'incentive_reduction' in scenario_summary.columns:
+    column_mapping['incentive_reduction'] = 'Incentive Reduction'
+if 'profit_change' in scenario_summary.columns:
+    column_mapping['profit_change'] = 'Profit Change'
+if 'profit_change_pct' in scenario_summary.columns:
+    column_mapping['profit_change_pct'] = 'Profit Change %'
+
+scenario_summary = scenario_summary.rename(columns=column_mapping)
 
 # Format monetary columns for display
 scenario_summary_display = scenario_summary.copy()
@@ -683,7 +710,7 @@ if st.session_state.pool_filter_mode_emission in ['top20', 'worst20']:
         if len(pool_data) > 0:
             with st.expander(f"{pool}"):
                 baseline_pool = pool_data['dao_profit_usd'].sum()
-                baseline_bal = pool_data['sim_bal_emitted'].sum() if 'sim_bal_emitted' in pool_data.columns else pool_data['bal_emited_votes'].sum()
+                baseline_bal = pool_data['bal_emited_votes'].sum()
                 baseline_inc = pool_data['direct_incentives'].sum()
                 
                 col_base1, col_base2, col_base3 = st.columns(3)

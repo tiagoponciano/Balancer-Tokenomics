@@ -2173,19 +2173,51 @@ def create_minimalist_chart(x, y, name, color, height=400):
     
     return fig
 
-def calculate_emission_reduction_impact(df, reduction_factor):
+def calculate_emission_reduction_impact(df, reduction_factor, core_only=False):
+    """
+    Calculate the impact of emission reduction on pools.
+    
+    Args:
+        df: DataFrame with pool data
+        reduction_factor: Factor to reduce emissions (0.5 = 50% reduction, keep 50%)
+        core_only: If True, only core pools receive emissions (non-core get 0)
+    
+    Returns:
+        DataFrame with reduced emissions and updated profits
+    """
     df_scenario = df.copy()
     
-    if 'sim_bal_emitted' in df_scenario.columns:
-        df_scenario['reduced_bal_emitted'] = df_scenario['sim_bal_emitted'] * reduction_factor
+    # Determine which pools get emissions
+    if core_only:
+        # Only core pools get emissions, non-core get 0
+        emission_mask = df_scenario.get('is_core_pool', pd.Series([0] * len(df_scenario))) == 1
     else:
-        df_scenario['reduced_bal_emitted'] = df_scenario['bal_emited_votes'] * reduction_factor
+        # All pools get emissions (reduced by factor)
+        emission_mask = pd.Series([True] * len(df_scenario))
     
+    # Calculate reduced BAL emissions (use bal_emited_votes from data, same as home page)
+    df_scenario['reduced_bal_emitted'] = df_scenario['bal_emited_votes'].where(
+        emission_mask, 0
+    ) * reduction_factor
+    
+    # Calculate reduced incentives (proportional to BAL emissions)
     if 'direct_incentives' in df_scenario.columns:
-        df_scenario['reduced_incentives'] = df_scenario['direct_incentives'] * reduction_factor
+        # For core_only mode, non-core pools get 0 incentives
+        # For normal mode, reduce incentives proportionally to BAL reduction
+        if core_only:
+            # Non-core pools get 0, core pools get reduced by factor
+            df_scenario['reduced_incentives'] = df_scenario['direct_incentives'].where(
+                emission_mask, 0
+            ) * reduction_factor
+        else:
+            # Reduce incentives proportionally to BAL reduction
+            bal_reduction_ratio = df_scenario['reduced_bal_emitted'] / df_scenario['bal_emited_votes'].replace(0, 1)
+            bal_reduction_ratio = bal_reduction_ratio.fillna(0).replace([float('inf'), -float('inf')], 0)
+            df_scenario['reduced_incentives'] = df_scenario['direct_incentives'] * bal_reduction_ratio
     else:
         df_scenario['reduced_incentives'] = 0
     
+    # Calculate new DAO profit
     if 'sim_dao_revenue' in df_scenario.columns:
         df_scenario['new_dao_profit'] = df_scenario['sim_dao_revenue'] - df_scenario['reduced_incentives']
     else:
