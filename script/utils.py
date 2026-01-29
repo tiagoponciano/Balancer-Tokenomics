@@ -1521,7 +1521,28 @@ def _process_main_data(df):
         return df
     df = df.copy()
     if 'block_date' in df.columns:
-        df['block_date'] = pd.to_datetime(df['block_date'], errors='coerce')
+        # Normalize dates: convert to datetime with UTC, then extract date only (YYYY-MM-DD)
+        # This handles mixed formats and timezones consistently (same as user did in notebook)
+        # Store original info for debugging
+        original_non_null = df['block_date'].notna().sum()
+        original_dtype = df['block_date'].dtype
+        
+        # Step 1: Convert to datetime with UTC (exactly as user did in notebook)
+        # Using errors='coerce' means invalid dates become NaT
+        df['block_date'] = pd.to_datetime(df['block_date'], format='mixed', utc=True, errors='coerce')
+        
+        # Step 2: Normalize to date only (removes time and timezone, but keeps as datetime)
+        # Only process non-NaT values to avoid issues
+        mask_valid = df['block_date'].notna()
+        if mask_valid.any():
+            # Use normalize() instead of .dt.date to keep it as datetime
+            # normalize() sets time to 00:00:00 and removes timezone, keeping datetime type
+            df.loc[mask_valid, 'block_date'] = pd.to_datetime(df.loc[mask_valid, 'block_date']).dt.normalize()
+        
+        # Final check
+        final_non_null = df['block_date'].notna().sum()
+        # Note: If dates were lost, it means some values in CSV couldn't be parsed
+        # This is expected if CSV has invalid date formats, but shouldn't happen if all are valid
     numeric_cols = [
         'swap_amount_usd', 'tvl_usd', 'tvl_eth',
         'total_protocol_fee_usd', 'protocol_fee_amount_usd',
@@ -2016,35 +2037,35 @@ def run_simulation_sidebar(df):
     with st.sidebar.expander("📊 Non-Core Pools", expanded=True):
         nc_dao_pct = st.slider(
             "DAO Share (%)",
-            min_value=0,
-            max_value=100,
-            value=50,
-            step=1,
-            key='nc_dao'
+            min_value=0.0,
+            max_value=100.0,
+            value=17.5,
+            step=0.5,
+            key="nc_dao"
         )
         nc_holders_pct = 100 - nc_dao_pct
-        st.caption(f"veBAL/BAL Holders: {nc_holders_pct}%")
+        st.caption(f"veBAL Holders: {nc_holders_pct}%")
     
     with st.sidebar.expander("⭐ Core Pools", expanded=True):
         c_dao_pct = st.slider(
             "DAO Share (%)",
-            min_value=0,
-            max_value=100,
-            value=18,
-            step=1,
-            key='c_dao'
+            min_value=0.0,
+            max_value=100.0,
+            value=17.5,
+            step=0.5,
+            key="c_dao"
         )
         remaining_core = 100 - c_dao_pct
         c_holders_pct = st.slider(
-            "veBAL/BAL Holders (%)",
-            min_value=0,
+            "veBAL Holders (%)",
+            min_value=0.0,
             max_value=remaining_core,
-            value=min(22, remaining_core),
-            step=1,
-            key='c_holders'
+            value=12.5,
+            step=0.5,
+            key="c_holders"
         )
         c_incentives_pct = 100 - c_dao_pct - c_holders_pct
-        st.caption(f"Incentives (Tribes): {c_incentives_pct}%")
+        st.caption(f"Bribes: {c_incentives_pct}%")
     
     st.sidebar.markdown("**3. Emissions**")
     emissions_per_week = st.sidebar.slider(
@@ -2085,7 +2106,15 @@ def run_simulation_sidebar(df):
         df_sim.loc[mask_core, 'remaining_revenue'] * (c_incentives_pct / 100)
     )
     
-    df_sim['week'] = df_sim['block_date'].dt.to_period('W').dt.start_time
+    # Ensure block_date is datetime before using .dt accessor
+    if not pd.api.types.is_datetime64_any_dtype(df_sim['block_date']):
+        df_sim['block_date'] = pd.to_datetime(df_sim['block_date'], errors='coerce')
+    
+    # Only process rows with valid dates
+    mask_valid_date = df_sim['block_date'].notna()
+    df_sim['week'] = pd.NaT
+    if mask_valid_date.any():
+        df_sim.loc[mask_valid_date, 'week'] = df_sim.loc[mask_valid_date, 'block_date'].dt.to_period('W').dt.start_time
     weekly_votes = df_sim.groupby('week')['votes_received'].sum()
     
     df_sim['weekly_total_votes'] = df_sim['week'].map(weekly_votes)
@@ -2144,19 +2173,51 @@ def create_minimalist_chart(x, y, name, color, height=400):
     
     return fig
 
-def calculate_emission_reduction_impact(df, reduction_factor):
+def calculate_emission_reduction_impact(df, reduction_factor, core_only=False):
+    """
+    Calculate the impact of emission reduction on pools.
+    
+    Args:
+        df: DataFrame with pool data
+        reduction_factor: Factor to reduce emissions (0.5 = 50% reduction, keep 50%)
+        core_only: If True, only core pools receive emissions (non-core get 0)
+    
+    Returns:
+        DataFrame with reduced emissions and updated profits
+    """
     df_scenario = df.copy()
     
-    if 'sim_bal_emitted' in df_scenario.columns:
-        df_scenario['reduced_bal_emitted'] = df_scenario['sim_bal_emitted'] * reduction_factor
+    # Determine which pools get emissions
+    if core_only:
+        # Only core pools get emissions, non-core get 0
+        emission_mask = df_scenario.get('is_core_pool', pd.Series([0] * len(df_scenario))) == 1
     else:
-        df_scenario['reduced_bal_emitted'] = df_scenario['bal_emited_votes'] * reduction_factor
+        # All pools get emissions (reduced by factor)
+        emission_mask = pd.Series([True] * len(df_scenario))
     
+    # Calculate reduced BAL emissions (use bal_emited_votes from data, same as home page)
+    df_scenario['reduced_bal_emitted'] = df_scenario['bal_emited_votes'].where(
+        emission_mask, 0
+    ) * reduction_factor
+    
+    # Calculate reduced incentives (proportional to BAL emissions)
     if 'direct_incentives' in df_scenario.columns:
-        df_scenario['reduced_incentives'] = df_scenario['direct_incentives'] * reduction_factor
+        # For core_only mode, non-core pools get 0 incentives
+        # For normal mode, reduce incentives proportionally to BAL reduction
+        if core_only:
+            # Non-core pools get 0, core pools get reduced by factor
+            df_scenario['reduced_incentives'] = df_scenario['direct_incentives'].where(
+                emission_mask, 0
+            ) * reduction_factor
+        else:
+            # Reduce incentives proportionally to BAL reduction
+            bal_reduction_ratio = df_scenario['reduced_bal_emitted'] / df_scenario['bal_emited_votes'].replace(0, 1)
+            bal_reduction_ratio = bal_reduction_ratio.fillna(0).replace([float('inf'), -float('inf')], 0)
+            df_scenario['reduced_incentives'] = df_scenario['direct_incentives'] * bal_reduction_ratio
     else:
         df_scenario['reduced_incentives'] = 0
     
+    # Calculate new DAO profit
     if 'sim_dao_revenue' in df_scenario.columns:
         df_scenario['new_dao_profit'] = df_scenario['sim_dao_revenue'] - df_scenario['reduced_incentives']
     else:

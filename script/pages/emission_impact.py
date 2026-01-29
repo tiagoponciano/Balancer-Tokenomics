@@ -68,6 +68,35 @@ function applyButtonIds() {
                     if (!button.id || !button.id.startsWith('btn_logout')) {
                         button.id = 'btn_logout';
                     }
+                } else if (text === '%' || text === 'Absolute' || textLower === '%' || textLower === 'absolute') {
+                    if (!button.id || button.id !== 'btn_toggle_percentage') {
+                        button.id = 'btn_toggle_percentage';
+                        button.classList.add('performance-button-fallback');
+                        button.setAttribute('data-button-type', 'toggle');
+                        
+                        // Apply all inline styles directly (maximum priority)
+                        const styles = {
+                            'width': 'auto',
+                            'min-width': '80px',
+                            'max-width': '120px',
+                            'height': '36px',
+                            'padding': '0.5rem 1rem',
+                            'font-weight': '600',
+                            'background': 'linear-gradient(135deg, rgba(103, 162, 225, 0.18) 0%, rgba(103, 162, 225, 0.08) 100%)',
+                            'border': '1.5px solid rgba(103, 162, 225, 0.45)',
+                            'color': '#8BB5F0',
+                            'border-radius': '12px',
+                            'transition': 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                            'box-shadow': '0 3px 12px rgba(103, 162, 225, 0.15)',
+                            'position': 'relative',
+                            'overflow': 'hidden',
+                            'letter-spacing': '0.02em'
+                        };
+                        
+                        Object.keys(styles).forEach(prop => {
+                            button.style.setProperty(prop, styles[prop], 'important');
+                        });
+                    }
                 }
             });
         } catch(e) {
@@ -104,6 +133,10 @@ if df.empty:
 # Initialize session state - default to 'all' (show everything)
 if 'pool_filter_mode_emission' not in st.session_state:
     st.session_state.pool_filter_mode_emission = 'all'  # Default: show all pools
+if 'show_core_percentage' not in st.session_state:
+    st.session_state.show_core_percentage = False  # Default: show absolute values
+if 'show_legit_mercenary_percentage' not in st.session_state:
+    st.session_state.show_legit_mercenary_percentage = False  # Default: show absolute values
 
 # Pool filters at the top of sidebar (FIRST - before any other sidebar content)
 utils.show_pool_filters('pool_filter_mode_emission')
@@ -114,13 +147,40 @@ df = utils.apply_date_filter(df, filter_year, filter_quarter)
 if df.empty:
     st.warning("No data in selected period. Adjust Year/Quarter or select «All».")
 
-df_sim = utils.run_simulation_sidebar(df)
+# Don't run simulation sidebar - we use bal_emited_votes directly from data (same as home page)
+# This page focuses on emission reduction scenarios, not revenue distribution simulation
+df_sim = df.copy()
+
+# Ensure block_date is datetime (needed for temporal charts)
+if 'block_date' in df_sim.columns:
+    if not pd.api.types.is_datetime64_any_dtype(df_sim['block_date']):
+        df_sim['block_date'] = pd.to_datetime(df_sim['block_date'], errors='coerce')
+
+# Ensure we have bal_emited_votes (same column used in home page)
+if 'bal_emited_votes' not in df_sim.columns:
+    df_sim['bal_emited_votes'] = 0
 
 st.sidebar.markdown("---")
-st.sidebar.markdown("### 📉 Emission Reduction Scenarios")
+st.sidebar.markdown("### 📉 Emission Reduction Scenario")
 
-reduction_50 = st.sidebar.checkbox("50% Reduction (Keep 50% of emissions)", value=True)
-reduction_70 = st.sidebar.checkbox("70% Reduction (Keep 30% of emissions)", value=True)
+# Custom reduction percentage input (number input for direct value entry)
+reduction_pct = st.sidebar.number_input(
+    "BAL Emission Reduction (%)",
+    min_value=0.0,
+    max_value=100.0,
+    value=0.0,
+    step=0.5,
+    help="Enter the percentage reduction in BAL emissions (e.g., 50 means 50% reduction, keeping 50% of emissions). Start with 0 for baseline."
+)
+
+reduction_factor = (100 - reduction_pct) / 100  # Convert to factor (50% reduction = 0.5 factor)
+
+# Toggle for core pools only
+core_only = st.sidebar.checkbox(
+    "Allow emissions only for Core Pools",
+    value=False,
+    help="If enabled, only core pools will receive emissions. Non-core pools will have zero emissions."
+)
 
 # Page Header with logout button
 col_title, col_logout = st.columns([1, 0.1])
@@ -129,6 +189,36 @@ with col_title:
     st.markdown('<div class="page-subtitle">Simulate emission reduction scenarios and analyze impact on legitimate vs mercenary pools</div>', unsafe_allow_html=True)
 with col_logout:
     utils.show_logout_button()
+
+st.markdown("---")
+
+# Explanation section at the beginning
+st.markdown("### 📖 Understanding Pool Classification")
+
+with st.expander("ℹ️ What are Legitimate vs Mercenary Pools?", expanded=False):
+    st.markdown("""
+    **Legitimate Pools:**
+    - Pools that generate positive DAO profit (revenue > incentives)
+    - Have good emissions ROI (revenue/incentives > 1.0)
+    - Generate meaningful revenue (>$10k) even without incentives
+    - Core pools with ROI > 0.7 are typically classified as legitimate
+    
+    **Mercenary Pools:**
+    - Pools that generate negative DAO profit (revenue < incentives)
+    - Have poor emissions ROI (revenue/incentives < 0.5)
+    - Highly dependent on incentives (>80% of revenue comes from incentives)
+    - Generate little to no revenue without incentives
+    
+    **Undefined Pools:**
+    - Pools that don't clearly fit into either category
+    - May have no incentives but also low revenue
+    - Require further analysis to classify
+    
+    **Core Pools:**
+    - Pools designated as "core" by the protocol
+    - Typically receive priority in emissions distribution
+    - May have different revenue distribution rules
+    """)
 
 st.markdown("---")
 
@@ -152,8 +242,8 @@ else:
 # ============================================================================
 st.markdown("### 📊 Emissions Analysis: Legitimate vs Mercenary Pools")
 
-# Determine which BAL column to use
-bal_col = 'sim_bal_emitted' if 'sim_bal_emitted' in df_display.columns else 'bal_emited_votes'
+# Use bal_emited_votes from data (same as home page)
+bal_col = 'bal_emited_votes'
 
 # Aggregate emissions by pool category
 emissions_by_category = df_display.groupby('pool_category').agg({
@@ -218,16 +308,47 @@ emissions_display['Percentage'] = emissions_display['Percentage'].apply(lambda x
 st.dataframe(emissions_display, use_container_width=True, hide_index=False)
 
 # Temporal chart for emissions by category
-st.markdown("#### 📈 Emissions Over Time: Legitimate vs Mercenary")
+col_chart_title_legit, col_toggle_legit = st.columns([1, 0.15])
+with col_chart_title_legit:
+    st.markdown("#### 📈 Emissions Over Time: Legitimate vs Mercenary")
+with col_toggle_legit:
+    # Button text changes based on current state
+    button_text_legit = "Absolute" if st.session_state.show_legit_mercenary_percentage else "%"
+    if st.button(button_text_legit, key="toggle_legit_mercenary_percentage", use_container_width=True):
+        st.session_state.show_legit_mercenary_percentage = not st.session_state.show_legit_mercenary_percentage
+        st.rerun()
+    
+    show_percentage_legit = st.session_state.show_legit_mercenary_percentage
 
-# Prepare temporal data
-df_display['month'] = df_display['block_date'].dt.to_period('M').dt.start_time
+# Prepare temporal data - ensure block_date is datetime
+if 'block_date' in df_display.columns:
+    if not pd.api.types.is_datetime64_any_dtype(df_display['block_date']):
+        df_display['block_date'] = pd.to_datetime(df_display['block_date'], errors='coerce')
+    df_display['month'] = df_display['block_date'].dt.to_period('M').dt.start_time
+else:
+    st.warning("block_date column not found. Cannot create temporal chart.")
+    df_display['month'] = pd.NaT
 emissions_temporal = df_display.groupby(['month', 'pool_category']).agg({
     bal_col: 'sum'
 }).reset_index()
 
 # Pivot for chart
 pivot_emissions = emissions_temporal.pivot(index='month', columns='pool_category', values=bal_col).fillna(0)
+
+# Normalize to percentage if toggle is on
+if show_percentage_legit:
+    # Calculate percentage for each month
+    row_sums = pivot_emissions.sum(axis=1)
+    pivot_emissions_pct = pivot_emissions.div(row_sums.replace(0, 1), axis=0) * 100
+    # Set to 0 where row sum was 0
+    pivot_emissions_pct.loc[row_sums == 0] = 0
+    data_to_plot_legit = pivot_emissions_pct
+    yaxis_title_legit = "Percentage (%)"
+    hovertemplate_suffix_legit = "%"
+else:
+    data_to_plot_legit = pivot_emissions
+    yaxis_title_legit = "BAL Emitted"
+    hovertemplate_suffix_legit = " BAL"
 
 # Create area chart
 fig_legit_mercenary = go.Figure()
@@ -238,16 +359,16 @@ colors = {
     'Undefined': '#95a5a6'
 }
 
-for category in pivot_emissions.columns:
+for category in data_to_plot_legit.columns:
     fig_legit_mercenary.add_trace(go.Scatter(
-        x=pivot_emissions.index,
-        y=pivot_emissions[category],
+        x=data_to_plot_legit.index,
+        y=data_to_plot_legit[category],
         mode='lines',
         name=category,
-        fill='tonexty' if category != pivot_emissions.columns[0] else 'tozeroy',
+        fill='tonexty' if category != data_to_plot_legit.columns[0] else 'tozeroy',
         stackgroup='one',
         line=dict(color=colors.get(category, '#3498db'), width=1.5),
-        hovertemplate=f'<b>{category}</b><br>%{{x|%b %Y}}<br>%{{y:,.0f}} BAL<extra></extra>'
+        hovertemplate=f'<b>{category}</b><br>%{{x|%b %Y}}<br>%{{y:,.2f}}{hovertemplate_suffix_legit}<extra></extra>'
     ))
 
 fig_legit_mercenary.update_layout(
@@ -267,8 +388,10 @@ fig_legit_mercenary.update_layout(
         showgrid=True,
         gridcolor='rgba(255,255,255,0.05)',
         showline=False,
-        title=dict(text="BAL Emitted", font=dict(size=12, color='#8B95A6')),
-        tickfont=dict(size=11, color='#8B95A6')
+        title=dict(text=yaxis_title_legit, font=dict(size=12, color='#8B95A6')),
+        tickfont=dict(size=11, color='#8B95A6'),
+        tickformat='.2f' if show_percentage_legit else ',.0f',
+        ticksuffix='%' if show_percentage_legit else ''
     ),
     hovermode='x unified',
     legend=dict(
@@ -346,7 +469,17 @@ emissions_core_display['Percentage'] = emissions_core_display['Percentage'].appl
 st.dataframe(emissions_core_display, use_container_width=True, hide_index=False)
 
 # Temporal chart for emissions by core status
-st.markdown("#### 📈 Emissions Over Time: Core vs Non-Core Pools")
+col_chart_title, col_toggle = st.columns([1, 0.15])
+with col_chart_title:
+    st.markdown("#### 📈 Emissions Over Time: Core vs Non-Core Pools")
+with col_toggle:
+    # Button text changes based on current state
+    button_text = "Absolute" if st.session_state.show_core_percentage else "%"
+    if st.button(button_text, key="toggle_core_percentage", use_container_width=True):
+        st.session_state.show_core_percentage = not st.session_state.show_core_percentage
+        st.rerun()
+    
+    show_percentage = st.session_state.show_core_percentage
 
 # Prepare temporal data
 emissions_temporal_core = df_display.groupby(['month', 'is_core_pool']).agg({
@@ -358,6 +491,19 @@ emissions_temporal_core['is_core_pool'] = emissions_temporal_core['is_core_pool'
 # Pivot for chart
 pivot_emissions_core = emissions_temporal_core.pivot(index='month', columns='is_core_pool', values=bal_col).fillna(0)
 
+# Normalize to percentage if toggle is on
+if show_percentage:
+    # Calculate percentage for each month
+    pivot_emissions_core_pct = pivot_emissions_core.div(pivot_emissions_core.sum(axis=1), axis=0) * 100
+    pivot_emissions_core_pct = pivot_emissions_core_pct.fillna(0)
+    data_to_plot = pivot_emissions_core_pct
+    yaxis_title = "Percentage (%)"
+    hovertemplate_suffix = "%"
+else:
+    data_to_plot = pivot_emissions_core
+    yaxis_title = "BAL Emitted"
+    hovertemplate_suffix = " BAL"
+
 # Create area chart
 fig_core_noncore = go.Figure()
 
@@ -366,16 +512,16 @@ core_colors = {
     'Non-Core Pools': '#E9A97B'
 }
 
-for pool_type in pivot_emissions_core.columns:
+for pool_type in data_to_plot.columns:
     fig_core_noncore.add_trace(go.Scatter(
-        x=pivot_emissions_core.index,
-        y=pivot_emissions_core[pool_type],
+        x=data_to_plot.index,
+        y=data_to_plot[pool_type],
         mode='lines',
         name=pool_type,
-        fill='tonexty' if pool_type != pivot_emissions_core.columns[0] else 'tozeroy',
+        fill='tonexty' if pool_type != data_to_plot.columns[0] else 'tozeroy',
         stackgroup='one',
         line=dict(color=core_colors.get(pool_type, '#3498db'), width=1.5),
-        hovertemplate=f'<b>{pool_type}</b><br>%{{x|%b %Y}}<br>%{{y:,.0f}} BAL<extra></extra>'
+        hovertemplate=f'<b>{pool_type}</b><br>%{{x|%b %Y}}<br>%{{y:,.2f}}{hovertemplate_suffix}<extra></extra>'
     ))
 
 fig_core_noncore.update_layout(
@@ -395,7 +541,7 @@ fig_core_noncore.update_layout(
         showgrid=True,
         gridcolor='rgba(255,255,255,0.05)',
         showline=False,
-        title=dict(text="BAL Emitted", font=dict(size=12, color='#8B95A6')),
+        title=dict(text=yaxis_title, font=dict(size=12, color='#8B95A6')),
         tickfont=dict(size=11, color='#8B95A6')
     ),
     hovermode='x unified',
@@ -418,22 +564,14 @@ st.markdown("---")
 # ============================================================================
 st.markdown("### 📊 Current State (Baseline)")
 
-if 'sim_bal_emitted' in df_display.columns:
-    baseline = df_display.groupby('pool_category').agg({
-        'sim_bal_emitted': 'sum',
-        'direct_incentives': 'sum',
-        'protocol_fee_amount_usd': 'sum',
-        'dao_profit_usd': 'sum'
-    }).round(2)
-    baseline.columns = ['BAL Emitted', 'Total Incentives', 'Total Revenue', 'Total DAO Profit']
-else:
-    baseline = df_display.groupby('pool_category').agg({
-        'bal_emited_votes': 'sum',
-        'direct_incentives': 'sum',
-        'protocol_fee_amount_usd': 'sum',
-        'dao_profit_usd': 'sum'
-    }).round(2)
-    baseline.columns = ['BAL Emitted', 'Total Incentives', 'Total Revenue', 'Total DAO Profit']
+# Use bal_emited_votes from data (same as home page)
+baseline = df_display.groupby('pool_category').agg({
+    'bal_emited_votes': 'sum',
+    'direct_incentives': 'sum',
+    'protocol_fee_amount_usd': 'sum',
+    'dao_profit_usd': 'sum'
+}).round(2)
+baseline.columns = ['BAL Emitted', 'Total Incentives', 'Total Revenue', 'Total DAO Profit']
 
 # Format monetary columns
 baseline_display = baseline.copy()
@@ -445,121 +583,117 @@ st.dataframe(baseline_display, use_container_width=True, hide_index=False)
 
 st.markdown("---")
 
-scenarios = []
-if reduction_50:
-    scenarios.append(('50% Reduction', 0.5))
-if reduction_70:
-    scenarios.append(('70% Reduction', 0.3))
+# Build scenario name based on settings
+scenario_name = f"{reduction_pct}% BAL Emission Reduction"
+if core_only:
+    scenario_name += " (Core Pools Only)"
 
-if not scenarios:
-    st.info("Please select at least one reduction scenario in the sidebar.")
-    st.stop()
+st.markdown(f"### 📈 Impact Analysis: {scenario_name}")
 
-st.markdown("### 📈 Impact Analysis by Scenario")
+# Calculate impact with new parameters
+df_scenario = utils.calculate_emission_reduction_impact(df_display, reduction_factor, core_only=core_only)
 
-scenario_data = []
+agg_dict = {
+    'reduced_incentives': 'sum',
+    'protocol_fee_amount_usd': 'sum',
+    'new_dao_profit': 'sum',
+    'direct_incentives': 'sum'
+}
 
-for scenario_name, reduction_factor in scenarios:
-    df_scenario = utils.calculate_emission_reduction_impact(df_display, reduction_factor)
-    
-    agg_dict = {
-        'reduced_incentives': 'sum',
-        'protocol_fee_amount_usd': 'sum',
-        'new_dao_profit': 'sum',
-        'direct_incentives': 'sum'
-    }
-    
-    if 'reduced_bal_emitted' in df_scenario.columns:
-        agg_dict['reduced_bal_emitted'] = 'sum'
-    if 'sim_bal_emitted' in df_scenario.columns:
-        agg_dict['sim_bal_emitted'] = 'sum'
-    elif 'bal_emited_votes' in df_scenario.columns:
-        agg_dict['bal_emited_votes'] = 'sum'
-    
-    scenario_summary = df_scenario.groupby('pool_category').agg(agg_dict).round(2)
-    
-    if 'reduced_bal_emitted' in scenario_summary.columns:
-        bal_col = 'reduced_bal_emitted'
-        orig_bal_col = 'sim_bal_emitted' if 'sim_bal_emitted' in scenario_summary.columns else 'bal_emited_votes'
-        scenario_summary['bal_reduction'] = scenario_summary[orig_bal_col] - scenario_summary[bal_col]
-    else:
-        scenario_summary['bal_reduction'] = 0
-    
-    scenario_summary['incentive_reduction'] = scenario_summary['direct_incentives'] - scenario_summary['reduced_incentives']
-    scenario_summary['profit_change'] = scenario_summary['new_dao_profit'] - baseline['Total DAO Profit']
-    scenario_summary['profit_change_pct'] = (scenario_summary['profit_change'] / baseline['Total DAO Profit'] * 100).round(2).fillna(0)
-    
-    if 'bal_reduction' in scenario_summary.columns and scenario_summary['bal_reduction'].sum() > 0:
-        scenario_summary.columns = ['Reduced Incentives', 'Total Revenue', 'New DAO Profit', 'Original Incentives', 'Reduced BAL', 'Original BAL', 'BAL Reduction', 'Incentive Reduction', 'Profit Change', 'Profit Change %']
-    else:
-        scenario_summary.columns = ['Reduced Incentives', 'Total Revenue', 'New DAO Profit', 'Original Incentives', 'Incentive Reduction', 'Profit Change', 'Profit Change %']
-    
-    # Format monetary columns for display
-    scenario_summary_display = scenario_summary.copy()
-    monetary_cols = ['Reduced Incentives', 'Total Revenue', 'New DAO Profit', 'Original Incentives', 'Incentive Reduction', 'Profit Change']
-    for col in monetary_cols:
-        if col in scenario_summary_display.columns:
-            scenario_summary_display[col] = scenario_summary_display[col].apply(lambda x: f"${x:,.0f}" if pd.notna(x) else "$0")
-    
-    # Format percentage column
-    if 'Profit Change %' in scenario_summary_display.columns:
-        scenario_summary_display['Profit Change %'] = scenario_summary_display['Profit Change %'].apply(lambda x: f"{x:.2f}%" if pd.notna(x) else "0.00%")
-    
-    scenario_data.append({
-        'name': scenario_name,
-        'data': scenario_summary
-    })
-    
-    st.markdown(f"#### {scenario_name}")
-    st.dataframe(scenario_summary_display, use_container_width=True, hide_index=False)
-    st.markdown("---")
+# Don't include reduced_bal_emitted in aggregation (removed from display)
+if 'bal_emited_votes' in df_scenario.columns:
+    agg_dict['bal_emited_votes'] = 'sum'
 
-st.markdown("### 📊 Comparison Charts")
+scenario_summary = df_scenario.groupby('pool_category').agg(agg_dict).round(2)
 
+# Calculate additional metrics
+if 'reduced_bal_emitted' in scenario_summary.columns and 'bal_emited_votes' in scenario_summary.columns:
+    scenario_summary['bal_reduction'] = scenario_summary['bal_emited_votes'] - scenario_summary['reduced_bal_emitted']
+else:
+    scenario_summary['bal_reduction'] = 0
+
+scenario_summary['incentive_reduction'] = scenario_summary['direct_incentives'] - scenario_summary['reduced_incentives']
+scenario_summary['profit_change'] = scenario_summary['new_dao_profit'] - baseline['Total DAO Profit']
+scenario_summary['profit_change_pct'] = (scenario_summary['profit_change'] / baseline['Total DAO Profit'] * 100).round(2).fillna(0)
+
+# Rename columns based on what actually exists
+column_mapping = {}
+if 'reduced_incentives' in scenario_summary.columns:
+    column_mapping['reduced_incentives'] = 'Reduced Incentives'
+if 'protocol_fee_amount_usd' in scenario_summary.columns:
+    column_mapping['protocol_fee_amount_usd'] = 'Total Revenue'
+if 'new_dao_profit' in scenario_summary.columns:
+    column_mapping['new_dao_profit'] = 'New DAO Profit'
+if 'direct_incentives' in scenario_summary.columns:
+    column_mapping['direct_incentives'] = 'Original Incentives'
+# Removed 'Reduced BAL' column as requested
+if 'bal_emited_votes' in scenario_summary.columns:
+    column_mapping['bal_emited_votes'] = 'Original BAL'
+if 'bal_reduction' in scenario_summary.columns:
+    column_mapping['bal_reduction'] = 'BAL Reduction'
+if 'incentive_reduction' in scenario_summary.columns:
+    column_mapping['incentive_reduction'] = 'Incentive Reduction'
+if 'profit_change' in scenario_summary.columns:
+    column_mapping['profit_change'] = 'Profit Change'
+if 'profit_change_pct' in scenario_summary.columns:
+    column_mapping['profit_change_pct'] = 'Profit Change %'
+
+scenario_summary = scenario_summary.rename(columns=column_mapping)
+
+# Drop 'Reduced BAL' column if it exists (after renaming, it would be 'reduced_bal_emitted')
+if 'reduced_bal_emitted' in scenario_summary.columns:
+    scenario_summary = scenario_summary.drop(columns=['reduced_bal_emitted'])
+
+# Format monetary columns for display
+scenario_summary_display = scenario_summary.copy()
+monetary_cols = ['Reduced Incentives', 'Total Revenue', 'New DAO Profit', 'Original Incentives', 'Incentive Reduction', 'Profit Change']
+for col in monetary_cols:
+    if col in scenario_summary_display.columns:
+        scenario_summary_display[col] = scenario_summary_display[col].apply(lambda x: f"${x:,.0f}" if pd.notna(x) else "$0")
+
+# Format percentage column
+if 'Profit Change %' in scenario_summary_display.columns:
+    scenario_summary_display['Profit Change %'] = scenario_summary_display['Profit Change %'].apply(lambda x: f"{x:.2f}%" if pd.notna(x) else "0.00%")
+
+st.dataframe(scenario_summary_display, use_container_width=True, hide_index=False)
+
+st.markdown("### 📊 Comparison Chart: Baseline vs Scenario")
+
+# Build comparison data
 comparison_data = []
-for scenario in scenario_data:
-    for category in scenario['data'].index:
-        comparison_data.append({
-            'Scenario': scenario['name'],
-            'Category': category,
-            'DAO Profit': scenario['data'].loc[category, 'New DAO Profit']
-        })
-
 for category in baseline.index:
     comparison_data.append({
-        'Scenario': 'Baseline',
         'Category': category,
-        'DAO Profit': baseline.loc[category, 'Total DAO Profit']
+        'Baseline': baseline.loc[category, 'Total DAO Profit'],
+        'Scenario': scenario_summary.loc[category, 'New DAO Profit'] if category in scenario_summary.index else 0
     })
 
 df_comparison = pd.DataFrame(comparison_data)
 
 if len(df_comparison) > 0:
-    pivot_profit = df_comparison.pivot(index='Category', columns='Scenario', values='DAO Profit')
-    
     fig1 = go.Figure()
     
-    # Define a more pleasant color palette
+    # Define color palette
     color_map = {
         'Baseline': '#4A90E2',        # Soft blue
-        '50% Reduction': '#F5A623',   # Warm orange
-        '70% Reduction': '#50C878'    # Fresh green
+        'Scenario': '#F5A623'         # Warm orange
     }
     
-    scenarios_list = ['Baseline'] + [s['name'] for s in scenario_data]
+    fig1.add_trace(go.Bar(
+        name='Baseline',
+        x=df_comparison['Category'],
+        y=df_comparison['Baseline'],
+        marker=dict(color=color_map['Baseline'], line=dict(width=0)),
+        marker_line_width=0
+    ))
     
-    for scenario in scenarios_list:
-        if scenario in pivot_profit.columns:
-            fig1.add_trace(go.Bar(
-                name=scenario,
-                x=list(pivot_profit.index),
-                y=pivot_profit[scenario],
-                marker=dict(
-                    color=color_map.get(scenario, '#6C7A89'),
-                    line=dict(width=0)
-                ),
-                marker_line_width=0
-            ))
+    fig1.add_trace(go.Bar(
+        name=scenario_name,
+        x=df_comparison['Category'],
+        y=df_comparison['Scenario'],
+        marker=dict(color=color_map['Scenario'], line=dict(width=0)),
+        marker_line_width=0
+    ))
     
     fig1.update_layout(
         template='plotly_dark',
@@ -578,7 +712,7 @@ if len(df_comparison) > 0:
             showgrid=True,
             gridcolor='rgba(255,255,255,0.05)',
             showline=False,
-            title="",
+            title="DAO Profit (USD)",
             tickfont=dict(size=11, color='#8B95A6')
         ),
         barmode='group',
@@ -607,7 +741,7 @@ if st.session_state.pool_filter_mode_emission in ['top20', 'worst20']:
         if len(pool_data) > 0:
             with st.expander(f"{pool}"):
                 baseline_pool = pool_data['dao_profit_usd'].sum()
-                baseline_bal = pool_data['sim_bal_emitted'].sum() if 'sim_bal_emitted' in pool_data.columns else pool_data['bal_emited_votes'].sum()
+                baseline_bal = pool_data['bal_emited_votes'].sum()
                 baseline_inc = pool_data['direct_incentives'].sum()
                 
                 col_base1, col_base2, col_base3 = st.columns(3)
@@ -617,25 +751,25 @@ if st.session_state.pool_filter_mode_emission in ['top20', 'worst20']:
                 
                 st.markdown("---")
                 
-                for scenario_name, reduction_factor in scenarios:
-                    df_scenario = utils.calculate_emission_reduction_impact(pool_data, reduction_factor)
-                    new_profit = df_scenario['new_dao_profit'].sum()
-                    profit_change = new_profit - baseline_pool
-                    
-                    reduced_bal = df_scenario['reduced_bal_emitted'].sum() if 'reduced_bal_emitted' in df_scenario.columns else baseline_bal * reduction_factor
-                    bal_reduction = baseline_bal - reduced_bal
-                    
-                    reduced_inc = df_scenario['reduced_incentives'].sum()
-                    inc_reduction = baseline_inc - reduced_inc
-                    
-                    st.markdown(f"**{scenario_name}**")
-                    col_s1, col_s2, col_s3 = st.columns(3)
-                    with col_s1:
-                        st.metric("New DAO Profit", f"${new_profit:,.0f}", f"${profit_change:,.0f}")
-                    with col_s2:
-                        st.metric("Reduced BAL", f"{reduced_bal:,.0f}", f"-{bal_reduction:,.0f}")
-                    with col_s3:
-                        st.metric("Reduced Incentives", f"${reduced_inc:,.0f}", f"-${inc_reduction:,.0f}")
-                    
-                    if idx < len(filtered_pools) - 1 or scenario_name != scenarios[-1][0]:
-                        st.markdown("---")
+                # Use current scenario settings
+                df_scenario = utils.calculate_emission_reduction_impact(pool_data, reduction_factor, core_only=core_only)
+                new_profit = df_scenario['new_dao_profit'].sum()
+                profit_change = new_profit - baseline_pool
+                
+                reduced_bal = df_scenario['reduced_bal_emitted'].sum() if 'reduced_bal_emitted' in df_scenario.columns else baseline_bal * reduction_factor
+                bal_reduction = baseline_bal - reduced_bal
+                
+                reduced_inc = df_scenario['reduced_incentives'].sum()
+                inc_reduction = baseline_inc - reduced_inc
+                
+                st.markdown(f"**{scenario_name}**")
+                col_s1, col_s2, col_s3 = st.columns(3)
+                with col_s1:
+                    st.metric("New DAO Profit", f"${new_profit:,.0f}", f"${profit_change:,.0f}")
+                with col_s2:
+                    st.metric("Reduced BAL", f"{reduced_bal:,.0f}", f"-{bal_reduction:,.0f}")
+                with col_s3:
+                    st.metric("Reduced Incentives", f"${reduced_inc:,.0f}", f"-${inc_reduction:,.0f}")
+                
+                if idx < len(filtered_pools) - 1:
+                    st.markdown("---")

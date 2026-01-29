@@ -69,6 +69,35 @@ function applyButtonIds() {
                     if (!button.id || !button.id.startsWith('btn_logout')) {
                         button.id = 'btn_logout';
                     }
+                } else if (text === '%' || text === 'Absolute' || textLower === '%' || textLower === 'absolute') {
+                    if (!button.id || button.id !== 'btn_toggle_percentage') {
+                        button.id = 'btn_toggle_percentage';
+                        button.classList.add('performance-button-fallback');
+                        button.setAttribute('data-button-type', 'toggle');
+                        
+                        // Apply all inline styles directly (maximum priority)
+                        const styles = {
+                            'width': 'auto',
+                            'min-width': '100px',
+                            'max-width': '140px',
+                            'height': '36px',
+                            'padding': '0.5rem 1rem',
+                            'font-weight': '600',
+                            'background': 'linear-gradient(135deg, rgba(103, 162, 225, 0.18) 0%, rgba(103, 162, 225, 0.08) 100%)',
+                            'border': '1.5px solid rgba(103, 162, 225, 0.45)',
+                            'color': '#8BB5F0',
+                            'border-radius': '12px',
+                            'transition': 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                            'box-shadow': '0 3px 12px rgba(103, 162, 225, 0.15)',
+                            'position': 'relative',
+                            'overflow': 'hidden',
+                            'letter-spacing': '0.02em'
+                        };
+                        
+                        Object.keys(styles).forEach(prop => {
+                            button.style.setProperty(prop, styles[prop], 'important');
+                        });
+                    }
                 }
             });
         } catch(e) {
@@ -102,17 +131,11 @@ if df.empty:
     st.error("❌ Unable to load data.")
     st.stop()
 
-if 'selected_pools_weekly' not in st.session_state:
-    st.session_state.selected_pools_weekly = []
 if 'pool_filter_mode_weekly' not in st.session_state:
     st.session_state.pool_filter_mode_weekly = 'all'  # Default: show all pools
 
 # Pool filters at the top of sidebar (FIRST - before any other sidebar content)
-def clear_weekly_selections():
-    """Clear selections when filter changes"""
-    st.session_state.selected_pools_weekly = []
-
-utils.show_pool_filters('pool_filter_mode_weekly', on_change_callback=clear_weekly_selections)
+utils.show_pool_filters('pool_filter_mode_weekly')
 
 # Date filter: Year + Quarter
 filter_year, filter_quarter = utils.show_date_filter_sidebar(df, key_prefix="date_filter_weekly")
@@ -120,7 +143,39 @@ df = utils.apply_date_filter(df, filter_year, filter_quarter)
 if df.empty:
     st.warning("No data in selected period. Adjust Year/Quarter or select «All».")
 
-df_sim = utils.run_simulation_sidebar(df)
+# Don't run simulation sidebar - we use bal_emited_votes directly from data (same as emission_impact page)
+df_sim = df.copy()
+
+# Ensure block_date is datetime (needed for temporal charts)
+if 'block_date' in df_sim.columns:
+    if not pd.api.types.is_datetime64_any_dtype(df_sim['block_date']):
+        df_sim['block_date'] = pd.to_datetime(df_sim['block_date'], errors='coerce')
+
+# Ensure we have bal_emited_votes (same column used in home page)
+if 'bal_emited_votes' not in df_sim.columns:
+    df_sim['bal_emited_votes'] = 0
+
+st.sidebar.markdown("---")
+st.sidebar.markdown("### 📉 Emission Reduction Scenario")
+
+# Custom reduction percentage input (number input for direct value entry)
+reduction_pct = st.sidebar.number_input(
+    "BAL Emission Reduction (%)",
+    min_value=0.0,
+    max_value=100.0,
+    value=0.0,
+    step=0.5,
+    help="Enter the percentage reduction in BAL emissions (e.g., 50 means 50% reduction, keeping 50% of emissions). Start with 0 for baseline."
+)
+
+reduction_factor = (100 - reduction_pct) / 100  # Convert to factor (50% reduction = 0.5 factor)
+
+# Toggle for core pools only
+core_only = st.sidebar.checkbox(
+    "Allow emissions only for Core Pools",
+    value=False,
+    help="If enabled, only core pools will receive emissions. Non-core pools will have zero emissions."
+)
 
 # Page Header with logout button
 col_title, col_logout = st.columns([1, 0.1])
@@ -138,17 +193,11 @@ if st.session_state.pool_filter_mode_weekly == 'top20':
     top_pools = utils.get_top_pools(df, n=20)
     top_pools_list = [str(p) for p in top_pools]
     df_display = df_sim[df_sim['pool_symbol'].isin(top_pools_list)].copy()
-    # Clear selections when mode changes
-    if st.session_state.selected_pools_weekly:
-        st.session_state.selected_pools_weekly = []
 elif st.session_state.pool_filter_mode_weekly == 'worst20':
     # Get worst 20 pools
     worst_pools = utils.get_worst_pools(df, n=20)
     worst_pools_list = [str(p) for p in worst_pools]
     df_display = df_sim[df_sim['pool_symbol'].isin(worst_pools_list)].copy()
-    # Clear selections when mode changes
-    if st.session_state.selected_pools_weekly:
-        st.session_state.selected_pools_weekly = []
 else:
     # 'all' mode - show everything
     df_display = df_sim.copy()
@@ -160,15 +209,31 @@ else:
 if 'direct_incentives' not in df_display.columns:
     df_display['direct_incentives'] = 0.0
 
-df_display['week'] = df_display['block_date'].dt.to_period('W').dt.start_time
+# Ensure block_date is datetime before using .dt accessor
+if 'block_date' in df_display.columns:
+    if not pd.api.types.is_datetime64_any_dtype(df_display['block_date']):
+        df_display['block_date'] = pd.to_datetime(df_display['block_date'], errors='coerce')
 
-df_weekly = df_display.groupby(['week', 'pool_category']).agg({
-    'bal_emited_votes': 'sum',
-    'direct_incentives': 'sum',
-    'votes_received': 'sum',
+# Apply emission reduction scenario (same as emission_impact page)
+df_scenario = utils.calculate_emission_reduction_impact(df_display, reduction_factor, core_only=core_only)
+
+df_scenario['week'] = df_scenario['block_date'].dt.to_period('W').dt.start_time
+
+df_weekly = df_scenario.groupby(['week', 'pool_category']).agg({
+    'reduced_bal_emitted': 'sum' if 'reduced_bal_emitted' in df_scenario.columns else 'bal_emited_votes',
+    'reduced_incentives': 'sum' if 'reduced_incentives' in df_scenario.columns else 'direct_incentives',
+    'votes_received': 'sum' if 'votes_received' in df_scenario.columns else 0,
     'protocol_fee_amount_usd': 'sum',
     'dao_profit_usd': 'sum'
 }).reset_index()
+
+# Rename columns for consistency
+if 'reduced_bal_emitted' in df_weekly.columns:
+    df_weekly['bal_emited_votes'] = df_weekly['reduced_bal_emitted']
+    df_weekly = df_weekly.drop(columns=['reduced_bal_emitted'])
+if 'reduced_incentives' in df_weekly.columns:
+    df_weekly['direct_incentives'] = df_weekly['reduced_incentives']
+    df_weekly = df_weekly.drop(columns=['reduced_incentives'])
 
 weekly_totals = df_weekly.groupby('week').agg({
     'bal_emited_votes': 'sum',
@@ -213,21 +278,50 @@ pivot_weekly_incentives = df_weekly.pivot(index='week', columns='pool_category',
 
 colors = {'Legitimate': '#2ecc71', 'Mercenary': '#e74c3c', 'Undefined': '#95a5a6'}
 
+# Initialize session state for toggles
+if 'show_weekly_bal_percentage' not in st.session_state:
+    st.session_state.show_weekly_bal_percentage = False
+if 'show_weekly_incentives_percentage' not in st.session_state:
+    st.session_state.show_weekly_incentives_percentage = False
+
 col_chart1, col_chart2 = st.columns(2)
 
 with col_chart1:
-    st.markdown("**Weekly BAL Emissions by Category**")
+    # Toggle for percentage view
+    col_toggle1, _ = st.columns([1, 10])
+    with col_toggle1:
+        toggle_text1 = "%" if not st.session_state.show_weekly_bal_percentage else "Absolute"
+        if st.button(toggle_text1, key="toggle_weekly_bal_percentage"):
+            st.session_state.show_weekly_bal_percentage = not st.session_state.show_weekly_bal_percentage
+            st.rerun()
+    
+    chart_title1 = "**Weekly BAL Emissions by Category**" if not st.session_state.show_weekly_bal_percentage else "**Weekly BAL Emissions by Category (%)**"
+    st.markdown(chart_title1)
+    
+    # Calculate percentages if toggle is on
+    if st.session_state.show_weekly_bal_percentage:
+        row_sums = pivot_weekly.sum(axis=1)
+        pivot_weekly_pct = pivot_weekly.div(row_sums.replace(0, 1), axis=0) * 100
+        pivot_weekly_pct.loc[row_sums == 0] = 0
+        data_to_plot1 = pivot_weekly_pct
+        yaxis_title1 = "Percentage (%)"
+        hovertemplate_suffix1 = "%"
+    else:
+        data_to_plot1 = pivot_weekly
+        yaxis_title1 = ""
+        hovertemplate_suffix1 = " BAL"
     
     fig1 = go.Figure()
     
-    for category in pivot_weekly.columns:
+    for category in data_to_plot1.columns:
         fig1.add_trace(go.Scatter(
-            x=pivot_weekly.index,
-            y=pivot_weekly[category],
+            x=data_to_plot1.index,
+            y=data_to_plot1[category],
             mode='lines',
             name=category,
             line=dict(color=colors.get(category, '#3498db'), width=1.5),
-            stackgroup='one'
+            stackgroup='one',
+            hovertemplate=f'<b>{category}</b><br>%{{x|%b %d, %Y}}<br>%{{y:,.2f}}{hovertemplate_suffix1}<extra></extra>'
         ))
     
     fig1.update_layout(
@@ -247,8 +341,10 @@ with col_chart1:
             showgrid=True,
             gridcolor='rgba(255,255,255,0.05)',
             showline=False,
-            title="",
-            tickfont=dict(size=11, color='#8B95A6')
+            title=yaxis_title1,
+            tickfont=dict(size=11, color='#8B95A6'),
+            tickformat='.2f' if st.session_state.show_weekly_bal_percentage else ',.0f',
+            ticksuffix='%' if st.session_state.show_weekly_bal_percentage else ''
         ),
         hovermode='x unified',
         legend=dict(
@@ -264,18 +360,41 @@ with col_chart1:
     st.plotly_chart(fig1, use_container_width=True, key="weekly_bal_emissions")
 
 with col_chart2:
-    st.markdown("**Weekly Incentives Distribution (USD)**")
+    # Toggle for percentage view
+    col_toggle2, _ = st.columns([1, 10])
+    with col_toggle2:
+        toggle_text2 = "%" if not st.session_state.show_weekly_incentives_percentage else "Absolute"
+        if st.button(toggle_text2, key="toggle_weekly_incentives_percentage"):
+            st.session_state.show_weekly_incentives_percentage = not st.session_state.show_weekly_incentives_percentage
+            st.rerun()
+    
+    chart_title2 = "**Weekly Incentives Distribution (USD)**" if not st.session_state.show_weekly_incentives_percentage else "**Weekly Incentives Distribution (%)**"
+    st.markdown(chart_title2)
+    
+    # Calculate percentages if toggle is on
+    if st.session_state.show_weekly_incentives_percentage:
+        row_sums = pivot_weekly_incentives.sum(axis=1)
+        pivot_weekly_incentives_pct = pivot_weekly_incentives.div(row_sums.replace(0, 1), axis=0) * 100
+        pivot_weekly_incentives_pct.loc[row_sums == 0] = 0
+        data_to_plot2 = pivot_weekly_incentives_pct
+        yaxis_title2 = "Percentage (%)"
+        hovertemplate_suffix2 = "%"
+    else:
+        data_to_plot2 = pivot_weekly_incentives
+        yaxis_title2 = ""
+        hovertemplate_suffix2 = " USD"
     
     fig2 = go.Figure()
     
-    for category in pivot_weekly_incentives.columns:
+    for category in data_to_plot2.columns:
         fig2.add_trace(go.Scatter(
-            x=pivot_weekly_incentives.index,
-            y=pivot_weekly_incentives[category],
+            x=data_to_plot2.index,
+            y=data_to_plot2[category],
             mode='lines',
             name=category,
             line=dict(color=colors.get(category, '#3498db'), width=1.5),
-            stackgroup='one'
+            stackgroup='one',
+            hovertemplate=f'<b>{category}</b><br>%{{x|%b %d, %Y}}<br>%{{y:,.2f}}{hovertemplate_suffix2}<extra></extra>'
         ))
     
     fig2.update_layout(
@@ -295,8 +414,10 @@ with col_chart2:
             showgrid=True,
             gridcolor='rgba(255,255,255,0.05)',
             showline=False,
-            title="",
-            tickfont=dict(size=11, color='#8B95A6')
+            title=yaxis_title2,
+            tickfont=dict(size=11, color='#8B95A6'),
+            tickformat='.2f' if st.session_state.show_weekly_incentives_percentage else ',.0f',
+            ticksuffix='%' if st.session_state.show_weekly_incentives_percentage else ''
         ),
         hovermode='x unified',
         legend=dict(
