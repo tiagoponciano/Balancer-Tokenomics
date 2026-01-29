@@ -1521,7 +1521,28 @@ def _process_main_data(df):
         return df
     df = df.copy()
     if 'block_date' in df.columns:
-        df['block_date'] = pd.to_datetime(df['block_date'], errors='coerce')
+        # Normalize dates: convert to datetime with UTC, then extract date only (YYYY-MM-DD)
+        # This handles mixed formats and timezones consistently (same as user did in notebook)
+        # Store original info for debugging
+        original_non_null = df['block_date'].notna().sum()
+        original_dtype = df['block_date'].dtype
+        
+        # Step 1: Convert to datetime with UTC (exactly as user did in notebook)
+        # Using errors='coerce' means invalid dates become NaT
+        df['block_date'] = pd.to_datetime(df['block_date'], format='mixed', utc=True, errors='coerce')
+        
+        # Step 2: Normalize to date only (removes time and timezone, but keeps as datetime)
+        # Only process non-NaT values to avoid issues
+        mask_valid = df['block_date'].notna()
+        if mask_valid.any():
+            # Use normalize() instead of .dt.date to keep it as datetime
+            # normalize() sets time to 00:00:00 and removes timezone, keeping datetime type
+            df.loc[mask_valid, 'block_date'] = pd.to_datetime(df.loc[mask_valid, 'block_date']).dt.normalize()
+        
+        # Final check
+        final_non_null = df['block_date'].notna().sum()
+        # Note: If dates were lost, it means some values in CSV couldn't be parsed
+        # This is expected if CSV has invalid date formats, but shouldn't happen if all are valid
     numeric_cols = [
         'swap_amount_usd', 'tvl_usd', 'tvl_eth',
         'total_protocol_fee_usd', 'protocol_fee_amount_usd',
@@ -2085,7 +2106,15 @@ def run_simulation_sidebar(df):
         df_sim.loc[mask_core, 'remaining_revenue'] * (c_incentives_pct / 100)
     )
     
-    df_sim['week'] = df_sim['block_date'].dt.to_period('W').dt.start_time
+    # Ensure block_date is datetime before using .dt accessor
+    if not pd.api.types.is_datetime64_any_dtype(df_sim['block_date']):
+        df_sim['block_date'] = pd.to_datetime(df_sim['block_date'], errors='coerce')
+    
+    # Only process rows with valid dates
+    mask_valid_date = df_sim['block_date'].notna()
+    df_sim['week'] = pd.NaT
+    if mask_valid_date.any():
+        df_sim.loc[mask_valid_date, 'week'] = df_sim.loc[mask_valid_date, 'block_date'].dt.to_period('W').dt.start_time
     weekly_votes = df_sim.groupby('week')['votes_received'].sum()
     
     df_sim['weekly_total_votes'] = df_sim['week'].map(weekly_votes)
