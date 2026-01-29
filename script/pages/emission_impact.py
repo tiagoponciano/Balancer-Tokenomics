@@ -104,6 +104,8 @@ if df.empty:
 # Initialize session state - default to 'all' (show everything)
 if 'pool_filter_mode_emission' not in st.session_state:
     st.session_state.pool_filter_mode_emission = 'all'  # Default: show all pools
+if 'show_core_percentage' not in st.session_state:
+    st.session_state.show_core_percentage = False  # Default: show absolute values
 
 # Pool filters at the top of sidebar (FIRST - before any other sidebar content)
 utils.show_pool_filters('pool_filter_mode_emission')
@@ -150,7 +152,7 @@ st.markdown("---")
 # Explanation section at the beginning
 st.markdown("### 📖 Understanding Pool Classification")
 
-with st.expander("ℹ️ What are Legitimate vs Mercenary Pools?", expanded=True):
+with st.expander("ℹ️ What are Legitimate vs Mercenary Pools?", expanded=False):
     st.markdown("""
     **Legitimate Pools:**
     - Pools that generate positive DAO profit (revenue > incentives)
@@ -391,7 +393,17 @@ emissions_core_display['Percentage'] = emissions_core_display['Percentage'].appl
 st.dataframe(emissions_core_display, use_container_width=True, hide_index=False)
 
 # Temporal chart for emissions by core status
-st.markdown("#### 📈 Emissions Over Time: Core vs Non-Core Pools")
+col_chart_title, col_toggle = st.columns([1, 0.15])
+with col_chart_title:
+    st.markdown("#### 📈 Emissions Over Time: Core vs Non-Core Pools")
+with col_toggle:
+    # Button text changes based on current state
+    button_text = "Absolute" if st.session_state.show_core_percentage else "%"
+    if st.button(button_text, key="toggle_core_percentage", use_container_width=True):
+        st.session_state.show_core_percentage = not st.session_state.show_core_percentage
+        st.rerun()
+    
+    show_percentage = st.session_state.show_core_percentage
 
 # Prepare temporal data
 emissions_temporal_core = df_display.groupby(['month', 'is_core_pool']).agg({
@@ -403,6 +415,19 @@ emissions_temporal_core['is_core_pool'] = emissions_temporal_core['is_core_pool'
 # Pivot for chart
 pivot_emissions_core = emissions_temporal_core.pivot(index='month', columns='is_core_pool', values=bal_col).fillna(0)
 
+# Normalize to percentage if toggle is on
+if show_percentage:
+    # Calculate percentage for each month
+    pivot_emissions_core_pct = pivot_emissions_core.div(pivot_emissions_core.sum(axis=1), axis=0) * 100
+    pivot_emissions_core_pct = pivot_emissions_core_pct.fillna(0)
+    data_to_plot = pivot_emissions_core_pct
+    yaxis_title = "Percentage (%)"
+    hovertemplate_suffix = "%"
+else:
+    data_to_plot = pivot_emissions_core
+    yaxis_title = "BAL Emitted"
+    hovertemplate_suffix = " BAL"
+
 # Create area chart
 fig_core_noncore = go.Figure()
 
@@ -411,16 +436,16 @@ core_colors = {
     'Non-Core Pools': '#E9A97B'
 }
 
-for pool_type in pivot_emissions_core.columns:
+for pool_type in data_to_plot.columns:
     fig_core_noncore.add_trace(go.Scatter(
-        x=pivot_emissions_core.index,
-        y=pivot_emissions_core[pool_type],
+        x=data_to_plot.index,
+        y=data_to_plot[pool_type],
         mode='lines',
         name=pool_type,
-        fill='tonexty' if pool_type != pivot_emissions_core.columns[0] else 'tozeroy',
+        fill='tonexty' if pool_type != data_to_plot.columns[0] else 'tozeroy',
         stackgroup='one',
         line=dict(color=core_colors.get(pool_type, '#3498db'), width=1.5),
-        hovertemplate=f'<b>{pool_type}</b><br>%{{x|%b %Y}}<br>%{{y:,.0f}} BAL<extra></extra>'
+        hovertemplate=f'<b>{pool_type}</b><br>%{{x|%b %Y}}<br>%{{y:,.2f}}{hovertemplate_suffix}<extra></extra>'
     ))
 
 fig_core_noncore.update_layout(
@@ -440,7 +465,7 @@ fig_core_noncore.update_layout(
         showgrid=True,
         gridcolor='rgba(255,255,255,0.05)',
         showline=False,
-        title=dict(text="BAL Emitted", font=dict(size=12, color='#8B95A6')),
+        title=dict(text=yaxis_title, font=dict(size=12, color='#8B95A6')),
         tickfont=dict(size=11, color='#8B95A6')
     ),
     hovermode='x unified',
