@@ -2037,35 +2037,35 @@ def run_simulation_sidebar(df):
     with st.sidebar.expander("📊 Non-Core Pools", expanded=True):
         nc_dao_pct = st.slider(
             "DAO Share (%)",
-            min_value=0,
-            max_value=100,
-            value=50,
-            step=1,
-            key='nc_dao'
+            min_value=0.0,
+            max_value=100.0,
+            value=17.5,
+            step=0.5,
+            key="nc_dao"
         )
         nc_holders_pct = 100 - nc_dao_pct
-        st.caption(f"veBAL/BAL Holders: {nc_holders_pct}%")
+        st.caption(f"veBAL Holders: {nc_holders_pct}%")
     
     with st.sidebar.expander("⭐ Core Pools", expanded=True):
         c_dao_pct = st.slider(
             "DAO Share (%)",
-            min_value=0,
-            max_value=100,
-            value=18,
-            step=1,
-            key='c_dao'
+            min_value=0.0,
+            max_value=100.0,
+            value=17.5,
+            step=0.5,
+            key="c_dao"
         )
         remaining_core = 100 - c_dao_pct
         c_holders_pct = st.slider(
             "veBAL Holders (%)",
-            min_value=0,
+            min_value=0.0,
             max_value=remaining_core,
-            value=min(22, remaining_core),
-            step=1,
-            key='c_holders'
+            value=12.5,
+            step=0.5,
+            key="c_holders"
         )
         c_incentives_pct = 100 - c_dao_pct - c_holders_pct
-        st.caption(f"Incentives (Bribes): {c_incentives_pct}%")
+        st.caption(f"Bribes: {c_incentives_pct}%")
     
     st.sidebar.markdown("**3. Emissions**")
     emissions_per_week = st.sidebar.slider(
