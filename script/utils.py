@@ -2057,7 +2057,7 @@ def run_simulation_sidebar(df):
         )
         remaining_core = 100 - c_dao_pct
         c_holders_pct = st.slider(
-            "veBAL/BAL Holders (%)",
+            "veBAL Holders (%)",
             min_value=0,
             max_value=remaining_core,
             value=min(22, remaining_core),
@@ -2065,7 +2065,7 @@ def run_simulation_sidebar(df):
             key='c_holders'
         )
         c_incentives_pct = 100 - c_dao_pct - c_holders_pct
-        st.caption(f"Incentives (Tribes): {c_incentives_pct}%")
+        st.caption(f"Incentives (Bribes): {c_incentives_pct}%")
     
     st.sidebar.markdown("**3. Emissions**")
     emissions_per_week = st.sidebar.slider(

@@ -263,8 +263,9 @@ try:
     bal_col = None
 
     # Try to find bribe amount column (case-insensitive search)
+    # Priority: bribe_amount_usd first (as specified by user)
     df_cols_lower = {col.lower(): col for col in df_to_check.columns}
-    for col_lower in ['direct_incentives', 'amount_usdc', 'bribe_amount_usd', 'total_bribes_usd', 'bribe_amount', 'bribes_usd', 'amount_usd', 'bribe', 'bribes', 'amount']:
+    for col_lower in ['bribe_amount_usd', 'direct_incentives', 'amount_usdc', 'total_bribes_usd', 'bribe_amount', 'bribes_usd', 'amount_usd', 'bribe', 'bribes', 'amount']:
         if col_lower in df_cols_lower:
             bribe_col = df_cols_lower[col_lower]
             break
@@ -777,8 +778,10 @@ if st.session_state.show_performance_by_pool:
             if not csv_match.empty:
                 # Create a minimal pool_bribe_data from CSV
                 pool_bribe_data = csv_match.iloc[[0]].copy()
-                # Map CSV columns to expected columns
-                if 'amount_usdc' in pool_bribe_data.columns:
+                # Map CSV columns to expected columns - prioritize bribe_amount_usd
+                if 'bribe_amount_usd' in pool_bribe_data.columns:
+                    pool_bribe_data[bribe_col] = pool_bribe_data['bribe_amount_usd']
+                elif 'amount_usdc' in pool_bribe_data.columns:
                     pool_bribe_data[bribe_col] = pool_bribe_data['amount_usdc']
         
         # If still empty, try pool_bribes as fallback
@@ -796,6 +799,8 @@ if st.session_state.show_performance_by_pool:
                 pool_bribes_val = 0
                 if bribe_col in pool_bribe_data.columns:
                     pool_bribes_val = pd.to_numeric(pool_bribe_data[bribe_col].iloc[0], errors='coerce') if pd.notna(pool_bribe_data[bribe_col].iloc[0]) else 0
+                elif 'bribe_amount_usd' in pool_bribe_data.columns:
+                    pool_bribes_val = pd.to_numeric(pool_bribe_data['bribe_amount_usd'].iloc[0], errors='coerce') if pd.notna(pool_bribe_data['bribe_amount_usd'].iloc[0]) else 0
                 elif 'amount_usdc' in pool_bribe_data.columns:
                     pool_bribes_val = pd.to_numeric(pool_bribe_data['amount_usdc'].iloc[0], errors='coerce') if pd.notna(pool_bribe_data['amount_usdc'].iloc[0]) else 0
                 
@@ -824,7 +829,9 @@ if st.session_state.show_performance_by_pool:
                         csv_row = csv_match.iloc[0]
                         col_p1, col_p2, col_p3 = st.columns(3)
                         
-                        pool_bribes_val = csv_row.get('amount_usdc', 0) if pd.notna(csv_row.get('amount_usdc')) else 0
+                        # Prioritize bribe_amount_usd, fallback to amount_usdc
+                        pool_bribes_val = csv_row.get('bribe_amount_usd', csv_row.get('amount_usdc', 0))
+                        pool_bribes_val = pd.to_numeric(pool_bribes_val, errors='coerce') if pd.notna(pool_bribes_val) else 0
                         
                         with col_p1:
                             st.metric("Total Bribes", f"${pool_bribes_val:,.0f}")
