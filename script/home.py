@@ -168,38 +168,54 @@ total_bal_emitted = df_display['sim_bal_emitted'].sum() if 'sim_bal_emitted' in 
 
 col1, col2, col3, col4 = st.columns(4)
 
-base_bal_week = df_display.attrs.get("base_bal_per_week")
 num_weeks = df_display.attrs.get("num_weeks")
-total_bal_data = df_display.attrs.get("total_bal_from_data")
-_base_desc = f"Baseline BAL/week = total BAL emitted in selected period ÷ number of weeks ({num_weeks:.0f} wk)" if (base_bal_week is not None and num_weeks is not None) else "Baseline BAL/week from data (total BAL in period ÷ number of weeks)"
+
+help_dao = (
+    "Revenue allocated to the DAO from protocol fees.\n\n"
+    "**How it is calculated:**\n"
+    "1. Remaining revenue = Total protocol fee − (Protocol fee % from sidebar)\n"
+    "2. Per pool: DAO Share % (sidebar) × remaining revenue — Non-Core and Core have distinct %\n"
+    "3. Sum over all pools\n"
+    "4. Multiply by emission factor: (1 − Decrease %) × (1 + Increase %)"
+)
+help_holders = (
+    "Revenue allocated to veBAL/BAL holders.\n\n"
+    "**How it is calculated:**\n"
+    "1. Remaining revenue = Total protocol fee − (Protocol fee % from sidebar)\n"
+    "2. Per pool: Holders Share % (sidebar) × remaining revenue\n"
+    "3. Sum over all pools\n"
+    "4. Multiply by emission factor: (1 − Decrease %) × (1 + Increase %)"
+)
+help_incentives = (
+    "Revenue allocated to incentives/bribes (Core pools only).\n\n"
+    "**How it is calculated:**\n"
+    "1. Remaining revenue = Total protocol fee − (Protocol fee % from sidebar)\n"
+    "2. Per Core pool: Incentives/Bribes % (sidebar) × remaining revenue\n"
+    "3. Sum over all pools\n"
+    "4. Multiply by emission factor: (1 − Decrease %) × (1 + Increase %)"
+)
+help_bal = (
+    "Total BAL emitted in the period (simulated and scaled).\n\n"
+    "**How it is calculated:**\n"
+    "1. Base BAL/week = Total BAL in period data ÷ number of weeks"
+    + (f" ({num_weeks:.0f} wk)" if num_weeks is not None else "")
+    + "\n"
+    "2. Factor = (1 − Decrease %) × (1 + Increase %)\n"
+    "3. Distribution per pool by vote_share (votes_received)\n"
+    "4. Total = sum of sim_bal_emitted (scaled to match raw sum × factor)"
+)
 
 with col1:
-    st.metric(
-        "DAO Revenue",
-        f"${total_dao:,.0f}",
-        help=f"Calculation: (total_protocol_fee_usd − protocol fee %) × DAO share % (sidebar, by core/non-core), summed over pools; then × emission factor. Emission factor = (1 − Decrease %) × (1 + Increase %). {_base_desc}."
-    )
+    st.metric("DAO Revenue", f"${total_dao:,.0f}", help=help_dao)
 
 with col2:
-    st.metric(
-        "Holders Revenue",
-        f"${total_holders:,.0f}",
-        help=f"Calculation: (total_protocol_fee_usd − protocol fee %) × Holders share % (sidebar), summed over pools; then × emission factor. Emission factor = (1 − Decrease %) × (1 + Increase %). {_base_desc}."
-    )
+    st.metric("Holders Revenue", f"${total_holders:,.0f}", help=help_holders)
 
 with col3:
-    st.metric(
-        "Incentives Revenue",
-        f"${total_incentives:,.0f}",
-        help=f"Calculation: (total_protocol_fee_usd − protocol fee %) × Incentives share % (sidebar, core pools only), summed over pools; then × emission factor. Emission factor = (1 − Decrease %) × (1 + Increase %). {_base_desc}."
-    )
+    st.metric("Incentives Revenue", f"${total_incentives:,.0f}", help=help_incentives)
 
 with col4:
-    st.metric(
-        "Total BAL Emitted",
-        f"{total_bal_emitted:,.0f}",
-        help=f"Calculation: sum over all pools of (vote_share × effective BAL/week). effective BAL/week = (total BAL in period ÷ {num_weeks:.0f} weeks) × (1 − Decrease %) × (1 + Increase %)." if num_weeks is not None else "Calculation: sum over all pools of (vote_share × effective BAL/week). effective BAL/week = (total BAL in period ÷ number of weeks) × (1 − Decrease %) × (1 + Increase %)."
-    )
+    st.metric("Total BAL Emitted", f"{total_bal_emitted:,.0f}", help=help_bal)
 
 st.markdown("---")
 
