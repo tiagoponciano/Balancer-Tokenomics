@@ -414,7 +414,7 @@ if not pool_bribes.empty and pool_col in pool_bribes.columns and bribe_col in po
     rr["pool_name"] = rr.get("pool_name", rr["pool"]).fillna(rr["pool"])
     all_pools_for_ranking = rr
 
-tab1, tab2, tab3 = st.tabs(["💰 Top Bribes", "📈 Most Votes", "🗳️ veBAL Votes"])
+tab1, tab2 = st.tabs(["💰 Top Bribes", "🗳️ veBAL Votes"])
 
 with tab1:
     if all_pools_for_ranking is not None and not all_pools_for_ranking.empty:
@@ -473,56 +473,6 @@ with tab1:
         st.info("Bribe amount data not available")
 
 with tab2:
-    if all_pools_for_ranking is not None and not all_pools_for_ranking.empty:
-        # Show all pools from pool_bribes, merge with votes from df_bribes_display (Balancer-Tokenomics)
-        ranking_df = all_pools_for_ranking[['pool', 'pool_title', 'pool_name']].copy()
-        
-        # Total votes per pool in the filtered period: aggregate by pool_symbol from main data
-        votes_dict = {}
-        if not df_bribes_display.empty and 'pool_symbol' in df_bribes_display.columns:
-            votes_col_use = votes_col if votes_col and votes_col in df_bribes_display.columns else 'votes_received'
-            if votes_col_use in df_bribes_display.columns:
-                pool_votes = df_bribes_display.groupby('pool_symbol')[votes_col_use].sum()
-                for pool_sym, total in pool_votes.items():
-                    key = str(pool_sym).upper().strip()
-                    if key:
-                        votes_dict[key] = pd.to_numeric(total, errors='coerce') if pd.notna(total) else 0
-        
-        # Match votes: pool column in ranking_df is pool_symbol from pool_bribes
-        def get_votes(row):
-            pool_val = str(row['pool']).upper().strip()
-            title_val = str(row.get('pool_title', '')).upper().strip()
-            name_val = str(row.get('pool_name', '')).upper().strip()
-            if pool_val in votes_dict:
-                return votes_dict[pool_val]
-            if title_val in votes_dict:
-                return votes_dict[title_val]
-            if name_val in votes_dict:
-                return votes_dict[name_val]
-            return 0
-        
-        ranking_df['Total Votes'] = ranking_df.apply(get_votes, axis=1)
-        
-        # Sort by votes descending
-        ranking_df = ranking_df.sort_values('Total Votes', ascending=False)
-        
-        # Display
-        display_df = ranking_df[['pool', 'Total Votes']].copy()
-        display_df.columns = ['Pool', 'Total Votes']
-        display_df['Total Votes'] = display_df['Total Votes'].apply(
-            lambda x: f"{float(x):,.0f}" if pd.notna(x) and float(x) > 0 else "0"
-        )
-        st.dataframe(display_df, use_container_width=True, hide_index=True)
-    elif votes_col and votes_col in pool_bribes.columns and not pool_bribes.empty:
-        # Fallback: show from pool_bribes
-        top_votes = pool_bribes.nlargest(20, votes_col)[[pool_col, votes_col]].copy()
-        top_votes.columns = ['Pool', 'Total Votes']
-        top_votes['Total Votes'] = top_votes['Total Votes'].apply(lambda x: f"{x:,.0f}")
-        st.dataframe(top_votes, use_container_width=True, hide_index=True)
-    else:
-        st.info("Votes data not available")
-
-with tab3:
     if all_pools_for_ranking is not None and not all_pools_for_ranking.empty:
         # Show all pools from pool_bribes, merge with veBAL votes from df_bribes_display (Balancer-Tokenomics)
         ranking_df = all_pools_for_ranking[['pool', 'pool_title', 'pool_name']].copy()
