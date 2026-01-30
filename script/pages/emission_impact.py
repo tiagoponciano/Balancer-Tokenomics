@@ -169,7 +169,7 @@ reduction_pct = st.sidebar.number_input(
     min_value=0.0,
     max_value=100.0,
     value=0.0,
-    step=0.5,
+    step=5.0,
     help="Enter the percentage reduction in BAL emissions (e.g., 50 means 50% reduction, keeping 50% of emissions). Start with 0 for baseline."
 )
 
@@ -599,10 +599,10 @@ agg_dict = {
     'new_dao_profit': 'sum',
     'direct_incentives': 'sum'
 }
-
-# Don't include reduced_bal_emitted in aggregation (removed from display)
 if 'bal_emited_votes' in df_scenario.columns:
     agg_dict['bal_emited_votes'] = 'sum'
+if 'reduced_bal_emitted' in df_scenario.columns:
+    agg_dict['reduced_bal_emitted'] = 'sum'
 
 scenario_summary = df_scenario.groupby('pool_category').agg(agg_dict).round(2)
 
@@ -640,12 +640,10 @@ if 'profit_change_pct' in scenario_summary.columns:
 
 scenario_summary = scenario_summary.rename(columns=column_mapping)
 
-# Drop 'Reduced BAL' column if it exists (after renaming, it would be 'reduced_bal_emitted')
-if 'reduced_bal_emitted' in scenario_summary.columns:
-    scenario_summary = scenario_summary.drop(columns=['reduced_bal_emitted'])
-
-# Format monetary columns for display
+# Format monetary columns for display (keep reduced_bal_emitted in scenario_summary for comparison chart)
 scenario_summary_display = scenario_summary.copy()
+if 'reduced_bal_emitted' in scenario_summary_display.columns:
+    scenario_summary_display = scenario_summary_display.drop(columns=['reduced_bal_emitted'])
 monetary_cols = ['Reduced Incentives', 'Total Revenue', 'New DAO Profit', 'Original Incentives', 'Incentive Reduction', 'Profit Change']
 for col in monetary_cols:
     if col in scenario_summary_display.columns:
@@ -673,17 +671,14 @@ df_comparison = pd.DataFrame(comparison_data)
 if len(df_comparison) > 0:
     fig1 = go.Figure()
     
-    # Define color palette
-    color_map = {
-        'Baseline': '#4A90E2',        # Soft blue
-        'Scenario': '#F5A623'         # Warm orange
-    }
+    color_baseline = '#67A2E1'
+    color_scenario = '#E9A97B'
     
     fig1.add_trace(go.Bar(
         name='Baseline',
         x=df_comparison['Category'],
         y=df_comparison['Baseline'],
-        marker=dict(color=color_map['Baseline'], line=dict(width=0)),
+        marker=dict(color=color_baseline, line=dict(width=0)),
         marker_line_width=0
     ))
     
@@ -691,7 +686,7 @@ if len(df_comparison) > 0:
         name=scenario_name,
         x=df_comparison['Category'],
         y=df_comparison['Scenario'],
-        marker=dict(color=color_map['Scenario'], line=dict(width=0)),
+        marker=dict(color=color_scenario, line=dict(width=0)),
         marker_line_width=0
     ))
     
@@ -727,6 +722,65 @@ if len(df_comparison) > 0:
     )
     
     st.plotly_chart(fig1, use_container_width=True, key="emission_comparison")
+
+    # Comparison chart: Baseline vs Scenario – BAL Emitted (same layout, Y = emissions)
+    comparison_emissions = []
+    for category in baseline.index:
+        scenario_bal = scenario_summary.loc[category, 'reduced_bal_emitted'] if category in scenario_summary.index and 'reduced_bal_emitted' in scenario_summary.columns else 0
+        comparison_emissions.append({
+            'Category': category,
+            'Baseline': baseline.loc[category, 'BAL Emitted'],
+            'Scenario': scenario_bal
+        })
+    df_comparison_emissions = pd.DataFrame(comparison_emissions)
+
+    if len(df_comparison_emissions) > 0:
+        fig2 = go.Figure()
+        fig2.add_trace(go.Bar(
+            name='Baseline',
+            x=df_comparison_emissions['Category'],
+            y=df_comparison_emissions['Baseline'],
+            marker=dict(color=color_baseline, line=dict(width=0)),
+            marker_line_width=0
+        ))
+        fig2.add_trace(go.Bar(
+            name=scenario_name,
+            x=df_comparison_emissions['Category'],
+            y=df_comparison_emissions['Scenario'],
+            marker=dict(color=color_scenario, line=dict(width=0)),
+            marker_line_width=0
+        ))
+        fig2.update_layout(
+            template='plotly_dark',
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(0,0,0,0)',
+            height=400,
+            margin=dict(l=40, r=20, t=20, b=40),
+            xaxis=dict(
+                showgrid=False,
+                showline=True,
+                linecolor='rgba(255,255,255,0.1)',
+                title="",
+                tickfont=dict(size=11, color='#8B95A6')
+            ),
+            yaxis=dict(
+                showgrid=True,
+                gridcolor='rgba(255,255,255,0.05)',
+                showline=False,
+                title="BAL Emitted",
+                tickfont=dict(size=11, color='#8B95A6')
+            ),
+            barmode='group',
+            legend=dict(
+                orientation="h",
+                yanchor="top",
+                y=1.05,
+                xanchor="left",
+                x=0,
+                font=dict(size=11, color='#8B95A6')
+            )
+        )
+        st.plotly_chart(fig2, use_container_width=True, key="emission_comparison_emissions")
 
 # Show detailed pool analysis when filtering by Top 20 or Worst 20
 if st.session_state.pool_filter_mode_emission in ['top20', 'worst20']:
