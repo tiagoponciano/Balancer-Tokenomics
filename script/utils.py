@@ -1612,35 +1612,41 @@ def _process_merged_data(df):
     return df
 
 
+def _get_possible_data_dirs():
+    """Same dirs as load_data() for local Balancer-Tokenomics.csv."""
+    cwd = os.getcwd()
+    try:
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.dirname(script_dir)
+    except Exception:
+        script_dir = cwd
+        project_root = os.path.dirname(cwd) if os.path.basename(cwd) == 'script' else cwd
+    return [
+        os.path.join(project_root, 'data'),
+        os.path.join(cwd, 'data'),
+        os.path.join(cwd, '..', 'data'),
+        os.path.join(script_dir, 'data'),
+        'data',
+    ]
+
+
 @st.cache_data
 def load_data():
-    """Load main data: Balancer-Tokenomics.csv first (single source). Fallback: balancer_v2_merged.csv, balancer_v2_master.csv."""
+    """Load main data: Balancer-Tokenomics.csv. Prefer local file (same as notebook) so totals match; else Supabase. Fallback: balancer_v2_merged.csv, balancer_v2_master.csv."""
     try:
-        df = download_csv_from_supabase(MAIN_DATA_FILENAME)
-        if df is not None and not df.empty:
-            return _process_main_data(df)
-
         cwd = os.getcwd()
-        try:
-            script_dir = os.path.dirname(os.path.abspath(__file__))
-            project_root = os.path.dirname(script_dir)
-        except Exception:
-            script_dir = cwd
-            project_root = os.path.dirname(cwd) if os.path.basename(cwd) == 'script' else cwd
-
-        possible_data_dirs = [
-            os.path.join(project_root, 'data'),
-            os.path.join(cwd, 'data'),
-            os.path.join(cwd, '..', 'data'),
-            os.path.join(script_dir, 'data'),
-            'data',
-        ]
+        possible_data_dirs = _get_possible_data_dirs()
+        # Prefer local Balancer-Tokenomics.csv so Total BAL Emitted (and other metrics) match notebook / CSV totals
         for data_dir in possible_data_dirs:
             path = os.path.join(os.path.abspath(data_dir), MAIN_DATA_FILENAME)
             if os.path.exists(path) and os.path.getsize(path) > 100:
                 df = pd.read_csv(path)
                 if df is not None and not df.empty:
                     return _process_main_data(df)
+
+        df = download_csv_from_supabase(MAIN_DATA_FILENAME)
+        if df is not None and not df.empty:
+            return _process_main_data(df)
 
         filenames = ['balancer_v2_merged.csv', 'balancer_v2_master.csv']
         df = None
@@ -2068,17 +2074,41 @@ def run_simulation_sidebar(df):
         st.caption(f"Bribes: {c_incentives_pct}%")
     
     st.sidebar.markdown("**3. Emissions**")
-    emissions_per_week = st.sidebar.slider(
-        "BAL Emitted per Week",
-        min_value=0,
-        max_value=200_000,
-        value=86_000,
-        step=1_000,
-        help="Amount of BAL emitted per week, distributed proportionally to votes"
+    decrease_pct = st.sidebar.number_input(
+        "Decrease emission by (%)",
+        min_value=0.0,
+        max_value=100.0,
+        value=0.0,
+        step=0.5,
+        help="Decrease BAL emission by this percentage (e.g. 50 = −50%)."
     )
-    
+    increase_pct = st.sidebar.number_input(
+        "Increase emission by (%)",
+        min_value=0.0,
+        max_value=100.0,
+        value=0.0,
+        step=0.5,
+        help="Increase BAL emission by this percentage (e.g. 20 = +20%)."
+    )
     df_sim = df.copy()
-    
+
+    # Base BAL/week from data: total BAL emitted in selected period ÷ number of weeks
+    if not pd.api.types.is_datetime64_any_dtype(df_sim['block_date']):
+        df_sim['block_date'] = pd.to_datetime(df_sim['block_date'], errors='coerce')
+    mask_valid_date = df_sim['block_date'].notna()
+    df_sim['week'] = pd.NaT
+    if mask_valid_date.any():
+        df_sim.loc[mask_valid_date, 'week'] = df_sim.loc[mask_valid_date, 'block_date'].dt.to_period('W').dt.start_time
+    num_weeks = max(1, df_sim['week'].nunique())
+    if 'bal_emited_votes' in df_sim.columns:
+        total_bal_from_data = pd.to_numeric(df_sim['bal_emited_votes'], errors='coerce').fillna(0).sum()
+    else:
+        total_bal_from_data = 0.0
+    base_bal_per_week = total_bal_from_data / num_weeks
+
+    emission_factor = (1 - decrease_pct / 100) * (1 + increase_pct / 100)
+    effective_emissions = base_bal_per_week * emission_factor
+
     mask_core = df_sim['is_core_pool'] == 1
     mask_noncore = df_sim['is_core_pool'] == 0
     
@@ -2106,28 +2136,35 @@ def run_simulation_sidebar(df):
         df_sim.loc[mask_core, 'remaining_revenue'] * (c_incentives_pct / 100)
     )
     
-    # Ensure block_date is datetime before using .dt accessor
-    if not pd.api.types.is_datetime64_any_dtype(df_sim['block_date']):
-        df_sim['block_date'] = pd.to_datetime(df_sim['block_date'], errors='coerce')
+    # Link BAL emission to all revenue: scale by emission scenario (effective ÷ base from data)
+    df_sim['sim_dao_revenue'] = df_sim['sim_dao_revenue'] * emission_factor
+    df_sim['sim_holders_revenue'] = df_sim['sim_holders_revenue'] * emission_factor
+    df_sim['sim_incentives_revenue'] = df_sim['sim_incentives_revenue'] * emission_factor
     
-    # Only process rows with valid dates
-    mask_valid_date = df_sim['block_date'].notna()
-    df_sim['week'] = pd.NaT
-    if mask_valid_date.any():
-        df_sim.loc[mask_valid_date, 'week'] = df_sim.loc[mask_valid_date, 'block_date'].dt.to_period('W').dt.start_time
+    # Vote share and sim_bal_emitted (effective_emissions already computed above)
     weekly_votes = df_sim.groupby('week')['votes_received'].sum()
-    
     df_sim['weekly_total_votes'] = df_sim['week'].map(weekly_votes)
     df_sim['vote_share'] = np.where(
         df_sim['weekly_total_votes'] > 0,
         df_sim['votes_received'] / df_sim['weekly_total_votes'],
         0
     )
-    
-    df_sim['sim_bal_emitted'] = df_sim['vote_share'] * emissions_per_week
+    df_sim['sim_bal_emitted'] = df_sim['vote_share'] * effective_emissions
+
+    # Scale so sum(sim_bal_emitted) = total_bal_from_data * emission_factor (matches soma bruta when factor=1)
+    # Rows with 0 votes get 0 from vote_share, so raw sum can be lower; scaling fixes the metric.
+    sim_sum = df_sim['sim_bal_emitted'].sum()
+    target_total = total_bal_from_data * emission_factor
+    if sim_sum > 0 and abs(sim_sum - target_total) > 0.01:
+        df_sim['sim_bal_emitted'] = df_sim['sim_bal_emitted'] * (target_total / sim_sum)
     
     df_sim.attrs['protocol_fee_pct'] = protocol_fee_pct
-    df_sim.attrs['emissions_per_week'] = emissions_per_week
+    df_sim.attrs['emissions_per_week'] = effective_emissions
+    df_sim.attrs['base_bal_per_week'] = base_bal_per_week
+    df_sim.attrs['num_weeks'] = num_weeks
+    df_sim.attrs['total_bal_from_data'] = total_bal_from_data
+    df_sim.attrs['emission_decrease_pct'] = decrease_pct
+    df_sim.attrs['emission_increase_pct'] = increase_pct
     df_sim.attrs['nc_dao_pct'] = nc_dao_pct
     df_sim.attrs['nc_holders_pct'] = nc_holders_pct
     df_sim.attrs['c_dao_pct'] = c_dao_pct

@@ -125,6 +125,8 @@ if df.empty:
         df_sim['sim_holders_revenue'] = 0.0
     if 'sim_incentives_revenue' not in df_sim.columns:
         df_sim['sim_incentives_revenue'] = 0.0
+    if 'sim_bal_emitted' not in df_sim.columns:
+        df_sim['sim_bal_emitted'] = 0.0
 else:
     df_sim = utils.run_simulation_sidebar(df)
 
@@ -161,21 +163,43 @@ total_revenue = df_display['sim_dao_revenue'].sum() + df_display['sim_holders_re
 total_dao = df_display['sim_dao_revenue'].sum()
 total_holders = df_display['sim_holders_revenue'].sum()
 total_incentives = df_display['sim_incentives_revenue'].sum()
-total_bal_emitted = df_display['bal_emited_votes'].sum()
+# Use simulated BAL from sidebar slider (BAL Emitted per Week × vote share); fallback to raw data when no simulation
+total_bal_emitted = df_display['sim_bal_emitted'].sum() if 'sim_bal_emitted' in df_display.columns else df_display['bal_emited_votes'].sum()
 
 col1, col2, col3, col4 = st.columns(4)
 
+base_bal_week = df_display.attrs.get("base_bal_per_week")
+num_weeks = df_display.attrs.get("num_weeks")
+total_bal_data = df_display.attrs.get("total_bal_from_data")
+_base_desc = f"Baseline BAL/week = total BAL emitted in selected period ÷ number of weeks ({num_weeks:.0f} wk)" if (base_bal_week is not None and num_weeks is not None) else "Baseline BAL/week from data (total BAL in period ÷ number of weeks)"
+
 with col1:
-    st.metric("DAO Revenue", f"${total_dao:,.0f}", help="Total revenue for DAO")
+    st.metric(
+        "DAO Revenue",
+        f"${total_dao:,.0f}",
+        help=f"Calculation: (total_protocol_fee_usd − protocol fee %) × DAO share % (sidebar, by core/non-core), summed over pools; then × emission factor. Emission factor = (1 − Decrease %) × (1 + Increase %). {_base_desc}."
+    )
 
 with col2:
-    st.metric("Holders Revenue", f"${total_holders:,.0f}", help="Total revenue for veBAL/BAL holders")
+    st.metric(
+        "Holders Revenue",
+        f"${total_holders:,.0f}",
+        help=f"Calculation: (total_protocol_fee_usd − protocol fee %) × Holders share % (sidebar), summed over pools; then × emission factor. Emission factor = (1 − Decrease %) × (1 + Increase %). {_base_desc}."
+    )
 
 with col3:
-    st.metric("Incentives Revenue", f"${total_incentives:,.0f}", help="Total revenue for incentives")
+    st.metric(
+        "Incentives Revenue",
+        f"${total_incentives:,.0f}",
+        help=f"Calculation: (total_protocol_fee_usd − protocol fee %) × Incentives share % (sidebar, core pools only), summed over pools; then × emission factor. Emission factor = (1 − Decrease %) × (1 + Increase %). {_base_desc}."
+    )
 
 with col4:
-    st.metric("Total BAL Emitted", f"{total_bal_emitted:,.0f}", help="Total BAL tokens emitted")
+    st.metric(
+        "Total BAL Emitted",
+        f"{total_bal_emitted:,.0f}",
+        help=f"Calculation: sum over all pools of (vote_share × effective BAL/week). effective BAL/week = (total BAL in period ÷ {num_weeks:.0f} weeks) × (1 − Decrease %) × (1 + Increase %)." if num_weeks is not None else "Calculation: sum over all pools of (vote_share × effective BAL/week). effective BAL/week = (total BAL in period ÷ number of weeks) × (1 − Decrease %) × (1 + Increase %)."
+    )
 
 st.markdown("---")
 
