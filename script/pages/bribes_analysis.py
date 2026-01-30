@@ -474,39 +474,32 @@ with tab1:
 
 with tab2:
     if all_pools_for_ranking is not None and not all_pools_for_ranking.empty:
-        # Show all pools from CSV, merge with votes data from df_bribes_display
+        # Show all pools from pool_bribes, merge with votes from df_bribes_display (Balancer-Tokenomics)
         ranking_df = all_pools_for_ranking[['pool', 'pool_title', 'pool_name']].copy()
         
-        # Get votes from df_bribes_display if available
+        # Total votes per pool in the filtered period: aggregate by pool_symbol from main data
         votes_dict = {}
-        if not df_bribes_display.empty:
-            if votes_col and votes_col in df_bribes_display.columns:
-                for pool_identifier in ['pool_title', 'pool_name', 'pool_symbol']:
-                    if pool_identifier in df_bribes_display.columns:
-                        pool_grouped = df_bribes_display.groupby(pool_identifier).agg({
-                            votes_col: 'max'  # Use max since votes are unique per gauge
-                        }).reset_index()
-                        
-                        for idx, row in pool_grouped.iterrows():
-                            pool_key = str(row[pool_identifier]).upper().strip()
-                            votes_val = pd.to_numeric(row.get(votes_col, 0), errors='coerce')
-                            if pool_key not in votes_dict:  # Don't overwrite if already set
-                                votes_dict[pool_key] = votes_val if pd.notna(votes_val) else 0
+        if not df_bribes_display.empty and 'pool_symbol' in df_bribes_display.columns:
+            votes_col_use = votes_col if votes_col and votes_col in df_bribes_display.columns else 'votes_received'
+            if votes_col_use in df_bribes_display.columns:
+                pool_votes = df_bribes_display.groupby('pool_symbol')[votes_col_use].sum()
+                for pool_sym, total in pool_votes.items():
+                    key = str(pool_sym).upper().strip()
+                    if key:
+                        votes_dict[key] = pd.to_numeric(total, errors='coerce') if pd.notna(total) else 0
         
-        # Match votes
+        # Match votes: pool column in ranking_df is pool_symbol from pool_bribes
         def get_votes(row):
             pool_val = str(row['pool']).upper().strip()
             title_val = str(row.get('pool_title', '')).upper().strip()
             name_val = str(row.get('pool_name', '')).upper().strip()
-            
             if pool_val in votes_dict:
                 return votes_dict[pool_val]
-            elif title_val in votes_dict:
+            if title_val in votes_dict:
                 return votes_dict[title_val]
-            elif name_val in votes_dict:
+            if name_val in votes_dict:
                 return votes_dict[name_val]
-            else:
-                return 0
+            return 0
         
         ranking_df['Total Votes'] = ranking_df.apply(get_votes, axis=1)
         
@@ -531,72 +524,62 @@ with tab2:
 
 with tab3:
     if all_pools_for_ranking is not None and not all_pools_for_ranking.empty:
-        # Show all pools from CSV, merge with veBAL votes data from df_bribes_display
+        # Show all pools from pool_bribes, merge with veBAL votes from df_bribes_display (Balancer-Tokenomics)
         ranking_df = all_pools_for_ranking[['pool', 'pool_title', 'pool_name']].copy()
         
-        # Get veBAL votes from df_bribes_display if available
+        # veBAL votes = votes_received in main data. Sum per pool in filtered period, then pct and rank
         vebal_votes_dict = {}
         vebal_pct_dict = {}
         vebal_rank_dict = {}
+        vebal_col = 'vebal_votes' if 'vebal_votes' in df_bribes_display.columns else 'votes_received'
+        if not df_bribes_display.empty and 'pool_symbol' in df_bribes_display.columns and vebal_col in df_bribes_display.columns:
+            pool_vebal = df_bribes_display.groupby('pool_symbol')[vebal_col].sum()
+            total_vebal = pool_vebal.sum()
+            # Rank by total votes descending (1 = highest)
+            pool_rank = pool_vebal.rank(method='min', ascending=False).astype(int)
+            for pool_sym in pool_vebal.index:
+                key = str(pool_sym).upper().strip()
+                if key:
+                    vebal_votes_dict[key] = pd.to_numeric(pool_vebal.loc[pool_sym], errors='coerce') if pd.notna(pool_vebal.loc[pool_sym]) else 0
+                    vebal_pct_dict[key] = (vebal_votes_dict[key] / total_vebal) if total_vebal and total_vebal > 0 else 0
+                    vebal_rank_dict[key] = int(pool_rank.loc[pool_sym]) if pool_sym in pool_rank.index else None
         
-        if not df_bribes_display.empty and 'vebal_votes' in df_bribes_display.columns:
-            for pool_identifier in ['pool_title', 'pool_name', 'pool_symbol']:
-                if pool_identifier in df_bribes_display.columns:
-                    pool_grouped = df_bribes_display.groupby(pool_identifier).agg({
-                        'vebal_votes': 'max',  # Use max since votes are unique per gauge
-                        'vebal_pct_votes': 'mean',
-                        'vebal_ranking': 'min'
-                    }).reset_index()
-                    
-                    for idx, row in pool_grouped.iterrows():
-                        pool_key = str(row[pool_identifier]).upper().strip()
-                        if pool_key not in vebal_votes_dict:  # Don't overwrite if already set
-                            vebal_votes_dict[pool_key] = pd.to_numeric(row.get('vebal_votes', 0), errors='coerce') if pd.notna(row.get('vebal_votes')) else 0
-                            vebal_pct_dict[pool_key] = pd.to_numeric(row.get('vebal_pct_votes', 0), errors='coerce') if pd.notna(row.get('vebal_pct_votes')) else 0
-                            vebal_rank_dict[pool_key] = pd.to_numeric(row.get('vebal_ranking', None), errors='coerce') if pd.notna(row.get('vebal_ranking')) else None
-        
-        # Match veBAL data
+        # Match veBAL data: pool column is pool_symbol from pool_bribes
         def get_vebal_votes(row):
             pool_val = str(row['pool']).upper().strip()
             title_val = str(row.get('pool_title', '')).upper().strip()
             name_val = str(row.get('pool_name', '')).upper().strip()
-            
             if pool_val in vebal_votes_dict:
                 return vebal_votes_dict[pool_val]
-            elif title_val in vebal_votes_dict:
+            if title_val in vebal_votes_dict:
                 return vebal_votes_dict[title_val]
-            elif name_val in vebal_votes_dict:
+            if name_val in vebal_votes_dict:
                 return vebal_votes_dict[name_val]
-            else:
-                return 0
+            return 0
         
         def get_vebal_pct(row):
             pool_val = str(row['pool']).upper().strip()
             title_val = str(row.get('pool_title', '')).upper().strip()
             name_val = str(row.get('pool_name', '')).upper().strip()
-            
             if pool_val in vebal_pct_dict:
                 return vebal_pct_dict[pool_val]
-            elif title_val in vebal_pct_dict:
+            if title_val in vebal_pct_dict:
                 return vebal_pct_dict[title_val]
-            elif name_val in vebal_pct_dict:
+            if name_val in vebal_pct_dict:
                 return vebal_pct_dict[name_val]
-            else:
-                return 0
+            return 0
         
         def get_vebal_rank(row):
             pool_val = str(row['pool']).upper().strip()
             title_val = str(row.get('pool_title', '')).upper().strip()
             name_val = str(row.get('pool_name', '')).upper().strip()
-            
             if pool_val in vebal_rank_dict:
                 return vebal_rank_dict[pool_val]
-            elif title_val in vebal_rank_dict:
+            if title_val in vebal_rank_dict:
                 return vebal_rank_dict[title_val]
-            elif name_val in vebal_rank_dict:
+            if name_val in vebal_rank_dict:
                 return vebal_rank_dict[name_val]
-            else:
-                return None
+            return None
         
         ranking_df['veBAL Votes'] = ranking_df.apply(get_vebal_votes, axis=1)
         ranking_df['Vote Share %'] = ranking_df.apply(get_vebal_pct, axis=1)
