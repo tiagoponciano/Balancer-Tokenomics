@@ -259,7 +259,6 @@ total_gauges = len(df_display)
 col_title, col_logout = st.columns([1, 0.1])
 with col_title:
     st.markdown('<div class="page-title">🗳️ veBAL Votes Analysis</div>', unsafe_allow_html=True)
-    st.markdown('<div class="page-subtitle">From Balancer-Tokenomics.csv • Votes by pool (votes_received) • Top/Worst 20 by protocol fees</div>', unsafe_allow_html=True)
 with col_logout:
     utils.show_logout_button()
 
